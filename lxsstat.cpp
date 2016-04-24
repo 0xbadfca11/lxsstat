@@ -48,6 +48,23 @@ struct FILE_GET_EA_INFORMATION
 constexpr size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
 constexpr size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 #pragma endregion
+#pragma region
+EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(
+	_In_  HANDLE           FileHandle,
+	_Out_ PIO_STATUS_BLOCK IoStatusBlock,
+	_Out_ PVOID            FsInformation,
+	_In_  ULONG            Length,
+	_In_  ULONG            FsInformationClass
+);
+constexpr ULONG FileFsSizeInformation = 3;
+struct FILE_FS_SIZE_INFORMATION
+{
+	LARGE_INTEGER TotalAllocationUnits;
+	LARGE_INTEGER AvailableAllocationUnits;
+	ULONG         SectorsPerAllocationUnit;
+	ULONG         BytesPerSector;
+};
+#pragma endregion
 
 constexpr char LxssEaName[] = "LXATTRB";
 #include <pshpack1.h>
@@ -136,13 +153,12 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 	{
 		bool source_is_posix_path = argv[i][0] == L'/';
 		auto windows_path = source_is_posix_path ? ConvertPOSIX2Windows(argv[i]) : argv[i];
-		printf("  File: '%ls'\n", argv[i]);
 
-		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
+		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_DATA | FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
 		if (h == INVALID_HANDLE_VALUE)
 		{
 			ULONG error = GetLastError();
-			fprintf(stderr, "GetLastError()==0x%08lx\n", error);
+			fprintf(stderr, "%ls\nGetLastError()==0x%08lx\n", windows_path.c_str(), error);
 			if (error == ERROR_SHARING_VIOLATION)
 			{
 				fputs("May be bash still alive.\n", stderr);
@@ -160,28 +176,79 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 		EaQuery->EaNameLength = (UCHAR)strlen(LxssEaName);
 		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, LxssEaName);
 
-		IO_STATUS_BLOCK iob;
-		NTSTATUS status = ZwQueryEaFile(h, &iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
-		if (NT_ERROR(status))
+		IO_STATUS_BLOCK ea_iob;
+		NTSTATUS ea_status = ZwQueryEaFile(h, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
+		if (NT_ERROR(ea_status))
 		{
-			if (status == STATUS_NO_EAS_ON_FILE)
+			if (ea_status == STATUS_NO_EAS_ON_FILE)
 			{
-				fprintf(stderr, "Extended Attributes not found\n");
+				fprintf(stderr, "%ls\nExtended Attributes not found\n", windows_path.c_str());
+			}
+			else
+			{
+				fprintf(stderr, "%ls\nERROR=%lx\n", windows_path.c_str(), ea_status);
 			}
 			continue;
 		}
 		// If EaList != null ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (iob.Information < 16 + sizeof(LXATTRB))
+		if (ea_iob.Information < 16 + sizeof(LXATTRB))
 		{
-			fprintf(stderr, "Extended Attributes not found\n");
+			fprintf(stderr, "%ls\nExtended Attributes not found\n", windows_path.c_str());
 			continue;
 		}
 		_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
 		const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
 
+		FILE_FS_SIZE_INFORMATION fssize_info;
+		IO_STATUS_BLOCK fssize_iob;
+		NTSTATUS fssize_status = NtQueryVolumeInformationFile(h, &fssize_iob, &fssize_info, sizeof fssize_info, FileFsSizeInformation);
+		if (NT_ERROR(fssize_status))
+		{
+			fprintf(stderr, "%ls\nERROR=%lx\n", windows_path.c_str(), fssize_status);
+			continue;
+		}
+		auto file_std_info = std::make_unique<FILE_STANDARD_INFO>();
+		GetFileInformationByHandleEx(h, FileStandardInfo, file_std_info.get(), sizeof(FILE_STANDARD_INFO));
+		auto file_id_info = std::make_unique<FILE_ID_INFO>();
+		GetFileInformationByHandleEx(h, FileIdInfo, file_id_info.get(), sizeof(FILE_ID_INFO));
+
+		printf("  File: '%ls'", argv[i]);
 		if (lxattr->permission.is_symlink)
 		{
-			puts("symlink");
+			if (file_std_info->EndOfFile.QuadPart <= PATHCCH_MAX_CCH)
+			{
+				ATL::CTempBuffer<BYTE> buffer(file_std_info->EndOfFile.QuadPart);
+				ULONG read_size;
+				if (ReadFile(h, buffer, file_std_info->EndOfFile.LowPart, &read_size, nullptr))
+				{
+					printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);
+				}
+				else
+				{
+					printf("  ->  ????(%lx)", GetLastError());
+				}
+			}
+			else
+			{
+				fputs(" symlink too long\n", stderr);
+			}
+		}
+		else
+		{
+			puts("");
+		}
+
+		const ULONG cluster_size = fssize_info.BytesPerSector * fssize_info.SectorsPerAllocationUnit;
+		printf(
+			"  Size: %-16llu Blocks: %-10llu IO Block: %-8lu ",
+			file_std_info->EndOfFile.QuadPart,
+			file_std_info->AllocationSize.QuadPart ? file_std_info->AllocationSize.QuadPart / cluster_size : 0,
+			cluster_size
+		);
+
+		if (lxattr->permission.is_symlink)
+		{
+			puts("symbolic link");
 		}
 		else if (lxattr->permission.is_directory)
 		{
@@ -189,11 +256,30 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 		}
 		else if (lxattr->permission.is_file)
 		{
-			puts("file");
+			puts("regular file");
 		}
 		else
 		{
 			puts("unknown");
+		}
+
+		BYTE eight_bytes[8] = {};
+		if (memcmp(&file_id_info->FileId.Identifier[8], eight_bytes, sizeof(ULONG64)) == 0)
+		{
+			printf(
+				"Inode: %-16llu  Links: %lu\n",
+				*(PULONG64)&file_id_info->FileId,
+				file_std_info->NumberOfLinks
+			);
+		}
+		else
+		{
+			printf(
+				"Inode: 0x%016llx%016llx  Links: %lu\n",
+				*(PULONG64)&file_id_info->FileId.Identifier[8],
+				*(PULONG64)&file_id_info->FileId.Identifier[0],
+				file_std_info->NumberOfLinks
+			);
 		}
 
 		printf(
