@@ -1,11 +1,20 @@
 #pragma once
+#define WIN32_LEAN_AND_MEAN
+#define STRICT
 #include <windows.h>
+#include <winternl.h>
 #include <array>
 #include <string>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <sys/stat.h>
+
+#ifndef STATUS_NO_EAS_ON_FILE
+constexpr NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
+#else
+static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L, "");
+#endif
 
 namespace Lxss
 {
@@ -25,23 +34,23 @@ namespace Lxss
 	constexpr uint32_t S_IROTH = 04;
 	constexpr uint32_t S_IWOTH = 02;
 	constexpr uint32_t S_IXOTH = 01;
-	bool inline S_ISLNK(uint32_t st_mode)
+	static bool inline S_ISLNK(uint32_t st_mode)
 	{
 		return (st_mode & S_IFLNK) != 0;
 	}
-	bool inline S_ISDIR(uint32_t st_mode)
+	static bool inline S_ISDIR(uint32_t st_mode)
 	{
 		return (st_mode & S_IFMT) == S_IFDIR;
 	}
-	bool inline S_ISREG(uint32_t st_mode)
+	static bool inline S_ISREG(uint32_t st_mode)
 	{
 		return (st_mode & S_IFMT) == S_IFREG;
 	}
-	uint32_t inline major(uint32_t st_dev)
+	static uint32_t inline major(uint32_t st_dev)
 	{
 		return HIWORD(st_dev);
 	}
-	uint32_t inline minor(uint32_t st_dev)
+	static uint32_t inline minor(uint32_t st_dev)
 	{
 		return LOWORD(st_dev);
 	}
@@ -65,7 +74,7 @@ namespace Lxss
 		uint32_t st_gid;
 		uint32_t st_mode;
 	};
-	_Success_(return == 0) int stat(_In_z_ const wchar_t *path, _Out_ struct Lxss::stat *buf);
+	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
 	std::wstring ConvertPOSIX2Windows(std::wstring posix_path);
 	std::array<char, 11> mode_tostring(uint32_t st_mode);
 #include <pshpack1.h>

@@ -101,26 +101,26 @@ namespace Lxss
 		}
 
 		std::array<char, 11> result;
-		result[0] = S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : '?';
-		result[1] = st_mode & S_IRUSR ? 'r' : '-';
-		result[2] = st_mode & S_IWUSR ? 'w' : '-';
-		result[3] = st_mode & S_ISUID
+		std::get<0>(result) = S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : '?';
+		std::get<1>(result) = st_mode & S_IRUSR ? 'r' : '-';
+		std::get<2>(result) = st_mode & S_IWUSR ? 'w' : '-';
+		std::get<3>(result) = st_mode & S_ISUID
 			? st_mode & S_IXUSR ? 's' : 'S'
 			: st_mode & S_IXUSR ? 'x' : '-';
-		result[4] = st_mode & S_IRGRP ? 'r' : '-';
-		result[5] = st_mode & S_IWGRP ? 'w' : '-';
-		result[6] = st_mode & S_ISGID
+		std::get<4>(result) = st_mode & S_IRGRP ? 'r' : '-';
+		std::get<5>(result) = st_mode & S_IWGRP ? 'w' : '-';
+		std::get<6>(result) = st_mode & S_ISGID
 			? st_mode & S_IXGRP ? 's' : 'S'
 			: st_mode & S_IXGRP ? 'x' : '-';
-		result[7] = st_mode & S_IROTH ? 'r' : '-';
-		result[8] = st_mode & S_IWOTH ? 'w' : '-';
-		result[9] = st_mode & S_ISVTX
+		std::get<7>(result) = st_mode & S_IROTH ? 'r' : '-';
+		std::get<8>(result) = st_mode & S_IWOTH ? 'w' : '-';
+		std::get<9>(result) = st_mode & S_ISVTX
 			? st_mode & S_IXOTH ? 't' : 'T'
 			: st_mode & S_IXOTH ? 'x' : '-';
-		result[10] = '\0';
+		std::get<10>(result) = '\0';
 		return result;
 	}
-	_Success_(return == 0) int stat(_In_z_ const wchar_t *path, _Out_ struct Lxss::stat *buf)
+	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
 		auto windows_path = path[0] == L'/' ? ConvertPOSIX2Windows(path) : [](PCWSTR path)->auto
 		{
@@ -189,9 +189,9 @@ namespace Lxss
 		// FILE_BASIC_INFO::CreationTime unused ?
 		buf->st_birthtim.tv_sec = 0;
 		buf->st_birthtim.tv_nsec = 0;
-		buf->st_size = file_std_info->EndOfFile.QuadPart;
+		buf->st_size = !lxattr->permission.is_directory ? file_std_info->EndOfFile.QuadPart : 0;
 		buf->st_blksize = file_storage_info->PhysicalBytesPerSectorForPerformance;
-		buf->st_blocks = file_std_info->AllocationSize.QuadPart ? file_std_info->AllocationSize.QuadPart / 512 : 0;
+		buf->st_blocks = file_std_info->AllocationSize.QuadPart / 512;
 		buf->st_uid = lxattr->st_uid;
 		buf->st_gid = lxattr->st_gid;
 		buf->st_mode = lxattr->st_mode;

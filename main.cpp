@@ -1,14 +1,14 @@
+#define WIN32_LEAN_AND_MEAN
+#define STRICT
+#define _ATL_NO_AUTOMATIC_NAMESPACE
 #define _CRT_SECURE_NO_WARNINGS
-#define WIN32_NO_STATUS
 #include <windows.h>
-#undef WIN32_NO_STATUS
-#include <ntstatus.h>
 #include <pathcch.h>
 #include <atlbase.h>
 #include <atlalloc.h>
-#include <memory>
 #include <cstdio>
 #include <cstdlib>
+#include <crtdbg.h>
 #include "lxsstat.hpp"
 
 int __cdecl wmain(int argc, wchar_t* argv[])
@@ -19,7 +19,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 	setlocale(LC_ALL, "");
 	if (argc <= 1)
 	{
-		puts("lxsstat {POSIX_PATH|WindowsPATH} [...]");
+		fputs("lxsstat {POSIX_PATH|Windows_PATH} [...]\n", stderr);
 		return EXIT_FAILURE;
 	}
 
@@ -63,11 +63,11 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 						ULONG error = GetLastError();
 						if (error == ERROR_SHARING_VIOLATION)
 						{
-							fputs("  ->  ????(ERROR_SHARING_VIOLATION)\n", stderr);
+							puts("  ->  ?\?\?\?(ERROR_SHARING_VIOLATION)");
 						}
 						else
 						{
-							printf("  ->  ????(%lx)", error);
+							printf("  ->  ?\?\?\?(%lx)", error);
 						}
 						if (h == INVALID_HANDLE_VALUE)
 						{
@@ -77,7 +77,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				}
 				else
 				{
-					fputs(" symlink too long\n", stderr);
+					puts("  ->  symlink too long");
 				}
 			}
 			else
@@ -85,7 +85,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				puts("");
 			}
 			printf(
-				"  Size: %-15llu Blocks: %-10llu IO Block: %-6lu ",
+				"  Size: %-15llu Blocks: %-10llu IO Block: %-6u ",
 				buf.st_size,
 				buf.st_blocks,
 				buf.st_blksize
@@ -114,7 +114,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				puts("unknown");
 			}
 			printf(
-				"Device: %uh/%ud   Inode: %llu  Links: %lu\n",
+				"Device: %uh/%ud   Inode: %llu  Links: %u\n",
 				Lxss::major(buf.st_dev),
 				Lxss::minor(buf.st_dev),
 				buf.st_ino,
@@ -145,6 +145,5 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			}
 			puts(" Birth: -");
 		}
-		puts("");
 	}
 }
