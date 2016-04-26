@@ -53,45 +53,58 @@ namespace Lxss
 	const auto lxss_root = []()->std::wstring
 	{
 		WCHAR temp[MAX_PATH];
-		if (!ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss\)", temp, ARRAYSIZE(temp)))
+		if (!ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)))
 		{
 			ATL::AtlThrowLastWin32();
 		}
 		return temp;
 	}();
-	std::wstring ConvertPOSIX2Windows(std::wstring posix_path)
+	std::wstring realpath(std::wstring path)
 	{
-		_ASSERTE(posix_path[0] == L'/');
-		bool need_reloc = false;
-		const PCWSTR reloc_directory[] = {
-			L"/root/",
-			L"/home/",
-		};
-		for (int i = 0; i < _countof(reloc_directory); ++i)
+		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
+		if (path[0] == '/')
 		{
-			if (wcsncmp(posix_path.c_str(), reloc_directory[i], wcslen(reloc_directory[i])) == 0 && posix_path.length() > wcslen(reloc_directory[i]))
+			for (size_t pos = path.find(L'#'); pos != std::string::npos; pos = path.find(L'#', pos))
 			{
-				need_reloc = true;
-				break;
+				path.insert(++pos, L"0023");
 			}
-		}
-		for (;;)
-		{
-			auto pos = posix_path.find('/');
-			if (pos == std::wstring::npos)
+			for (size_t pos = path.find(L':'); pos != std::string::npos; pos = path.find(L':', pos))
 			{
-				break;
+				path[pos] = L'#';
+				path.insert(++pos, L"003A");
 			}
-			posix_path[pos] = '\\';
+			bool need_reloc = false;
+			const PCWSTR reloc_directory[] = {
+				L"/root/",
+				L"/home/",
+			};
+			for (int i = 0; i < _countof(reloc_directory); ++i)
+			{
+				if (wcsncmp(path.c_str(), reloc_directory[i], wcslen(reloc_directory[i])) == 0 && path.length() > wcslen(reloc_directory[i]))
+				{
+					need_reloc = true;
+					break;
+				}
+			}
+			path.insert(0, !need_reloc ? lxss_root + L"\\rootfs" : lxss_root);
 		}
-		std::wstring windows_path = lxss_root + (!need_reloc ? L"rootfs" + posix_path : posix_path);
-		auto final_path = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-		if (FAILED(PathCchCanonicalizeEx(final_path.get(), PATHCCH_MAX_CCH, windows_path.c_str(), PATHCCH_ALLOW_LONG_PATHS)))
+		const WCHAR prefix[] = LR"(\\?\)";
+		if (!PathIsRelativeW(path.c_str()) && wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0 && path[0] != '\\')
 		{
-			::ATL::AtlThrowLastWin32();
+			path.insert(0, prefix);
 		}
-		_RPT1(_CRT_WARN, "ConvertPOSIX2Windows()=%ls\n", final_path.get());
-		return final_path.get();
+		auto stage1 = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
+		if (!GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr))
+		{
+			ATL::AtlThrowLastWin32();
+		}
+		std::wstring stage2(stage1.get());
+		if (wcsncmp(stage2.c_str(), prefix, wcslen(prefix)) != 0 && !PathIsUNCW(stage2.c_str()))
+		{
+			stage2.insert(0, prefix);
+		}
+		_RPT1(_CRT_WARN, "realpath(>%ls)\n", stage2.c_str());
+		return stage2;
 	}
 	std::array<char, 11> mode_tostring(uint32_t st_mode)
 	{
@@ -122,12 +135,7 @@ namespace Lxss
 	}
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
-		auto windows_path = path[0] == L'/' ? ConvertPOSIX2Windows(path) : [](PCWSTR path)->auto
-		{
-			auto final_path = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-			GetFullPathNameW(path, PATHCCH_MAX_CCH, final_path.get(), nullptr);
-			return final_path;
-		}(path).get();
+		auto windows_path = realpath(path);
 
 		::ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
 		if (h == INVALID_HANDLE_VALUE)

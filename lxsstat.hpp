@@ -75,7 +75,7 @@ namespace Lxss
 		uint32_t st_mode;
 	};
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
-	std::wstring ConvertPOSIX2Windows(std::wstring posix_path);
+	std::wstring realpath(std::wstring path);
 	std::array<char, 11> mode_tostring(uint32_t st_mode);
 #include <pshpack1.h>
 	struct LXATTRB

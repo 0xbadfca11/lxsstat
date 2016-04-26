@@ -25,12 +25,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 
 	for (int i = 1; i < argc; ++i)
 	{
-		auto windows_path = argv[i][0] == L'/' ? Lxss::ConvertPOSIX2Windows(argv[i]) : [](PCWSTR path)->auto
-		{
-			auto final_path = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-			GetFullPathNameW(path, PATHCCH_MAX_CCH, final_path.get(), nullptr);
-			return final_path;
-		}(argv[i]).get();
+		auto windows_path = Lxss::realpath(argv[i]);
 		struct Lxss::stat buf;
 		if (Lxss::stat(windows_path.c_str(), &buf) != 0)
 		{
