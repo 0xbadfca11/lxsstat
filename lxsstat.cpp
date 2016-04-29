@@ -75,12 +75,15 @@ namespace Lxss
 			}
 			bool need_reloc = false;
 			const PCWSTR reloc_directory[] = {
-				L"/root/",
-				L"/home/",
+				L"/root",
+				L"/home",
 			};
 			for (int i = 0; i < _countof(reloc_directory); ++i)
 			{
-				if (wcsncmp(path.c_str(), reloc_directory[i], wcslen(reloc_directory[i])) == 0 && path.length() > wcslen(reloc_directory[i]))
+				const size_t reloc_length = wcslen(reloc_directory[i]);
+				if (
+					wcsncmp(path.c_str(), reloc_directory[i], reloc_length) == 0
+					&& (path[reloc_length] == L'\0' || path[reloc_length] == L'/'))
 				{
 					need_reloc = true;
 					break;
