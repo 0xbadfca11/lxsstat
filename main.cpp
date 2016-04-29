@@ -49,7 +49,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					::ATL::CTempBuffer<BYTE> buffer(buf.st_size);
 					ULONG read_size;
 					::ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
-					if (h != INVALID_HANDLE_VALUE&&ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
+					if (h != INVALID_HANDLE_VALUE && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
 						printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);
 					}

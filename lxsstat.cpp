@@ -55,14 +55,14 @@ namespace Lxss
 		WCHAR temp[MAX_PATH];
 		if (!ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)))
 		{
-			ATL::AtlThrowLastWin32();
+			::ATL::AtlThrowLastWin32();
 		}
 		return temp;
 	}();
 	std::wstring realpath(std::wstring path)
 	{
 		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
-		if (path[0] == '/')
+		if (path[0] == L'/')
 		{
 			for (size_t pos = path.find(L'#'); pos != std::string::npos; pos = path.find(L'#', pos))
 			{
@@ -96,7 +96,7 @@ namespace Lxss
 		auto stage1 = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
 		if (!GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr))
 		{
-			ATL::AtlThrowLastWin32();
+			::ATL::AtlThrowLastWin32();
 		}
 		std::wstring stage2(stage1.get());
 		if (wcsncmp(stage2.c_str(), prefix, wcslen(prefix)) != 0 && !PathIsUNCW(stage2.c_str()))
@@ -160,7 +160,7 @@ namespace Lxss
 			return -1;
 		}
 		// If EaList != null ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (ea_iob.Information < 16 + sizeof(LXATTRB))
+		if (Ea->EaValueLength != sizeof(LXATTRB))
 		{
 			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
 			return -1;
