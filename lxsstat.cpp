@@ -193,7 +193,8 @@ namespace Lxss
 		// Always 0 ?
 		buf->st_dev = 0;
 		buf->FileId = file_id_info->FileId;
-		buf->st_nlink = file_std_info->NumberOfLinks;
+		// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
+		buf->st_nlink = !lxattr->permission.is_directory ? file_std_info->NumberOfLinks : 2;
 		buf->st_atim.tv_sec = lxattr->atime;
 		buf->st_atim.tv_nsec = lxattr->atime_extra;
 		buf->st_mtim.tv_sec = lxattr->mtime;
