@@ -7,9 +7,10 @@
 #include <ntstatus.h>
 #include <winternl.h>
 #include <pathcch.h>
-#include <atlbase.h>
 #include <atlalloc.h>
+#include <atlbase.h>
 #include <atlchecked.h>
+#include <atlcore.h>
 #include <array>
 #include <memory>
 #include <string>
@@ -55,7 +56,7 @@ namespace Lxss
 		WCHAR temp[MAX_PATH];
 		if (!ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)))
 		{
-			::ATL::AtlThrowLastWin32();
+			ATL::AtlThrowLastWin32();
 		}
 		return temp;
 	}();
@@ -99,7 +100,7 @@ namespace Lxss
 		auto stage1 = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
 		if (!GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr))
 		{
-			::ATL::AtlThrowLastWin32();
+			ATL::AtlThrowLastWin32();
 		}
 		std::wstring stage2(stage1.get());
 		if (wcsncmp(stage2.c_str(), prefix, wcslen(prefix)) != 0 && !PathIsUNCW(stage2.c_str()))
@@ -140,20 +141,22 @@ namespace Lxss
 	{
 		auto windows_path = realpath(path);
 
-		::ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
+		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
 		if (h == INVALID_HANDLE_VALUE)
 		{
 			return -1;
 		}
 
 		constexpr size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
-		::ATL::CTempBuffer<FILE_FULL_EA_INFORMATION> Ea(EaLength);
+		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
+		Ea.AllocateBytes(EaLength);
 
 		constexpr size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
-		::ATL::CTempBuffer<FILE_GET_EA_INFORMATION> EaQuery(EaQueryLength);
+		ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
+		EaQuery.AllocateBytes(EaQueryLength);
 		EaQuery->NextEntryOffset = 0;
 		EaQuery->EaNameLength = (UCHAR)strlen(LxssEaName);
-		::ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, LxssEaName);
+		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, LxssEaName);
 
 		IO_STATUS_BLOCK ea_iob;
 		NTSTATUS ea_status = ZwQueryEaFile(h, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
@@ -197,7 +200,6 @@ namespace Lxss
 		buf->st_mtim.tv_nsec = lxattr->mtime_extra;
 		buf->st_ctim.tv_sec = lxattr->ctime;
 		buf->st_ctim.tv_nsec = lxattr->ctime_extra;
-		// FILE_BASIC_INFO::CreationTime unused ?
 		buf->st_birthtim.tv_sec = 0;
 		buf->st_birthtim.tv_nsec = 0;
 		buf->st_size = !lxattr->permission.is_directory ? file_std_info->EndOfFile.QuadPart : 0;

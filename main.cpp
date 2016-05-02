@@ -4,8 +4,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <pathcch.h>
-#include <atlbase.h>
 #include <atlalloc.h>
+#include <atlbase.h>
 #include <cstdio>
 #include <cstdlib>
 #include <crtdbg.h>
@@ -46,9 +46,9 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			{
 				if (buf.st_size <= PATHCCH_MAX_CCH)
 				{
-					::ATL::CTempBuffer<BYTE> buffer(buf.st_size);
+					ATL::CTempBuffer<BYTE> buffer(buf.st_size);
 					ULONG read_size;
-					::ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
+					ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
 					if (h != INVALID_HANDLE_VALUE && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
 						printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);
@@ -125,8 +125,8 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				buf.st_uid,
 				buf.st_gid
 			);
-			struct _timespec64 mactime[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
-			const char *mactime_string[] = { "Access", "Modify", "Change" };
+			const struct _timespec64 (&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
+			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };
 			for (int j = 0; j < _countof(mactime); ++j)
 			{
 				char str[80];
@@ -138,7 +138,6 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				);
 				printf("%s: %s.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
 			}
-			puts(" Birth: -");
 		}
 	}
 }
