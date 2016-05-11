@@ -131,18 +131,34 @@ namespace Lxss
 		std::get<10>(result) = '\0';
 		return result;
 	}
+	struct _timespec64 FileTimeToUnixTime(LONG64 ft)
+	{
+		const int64_t diff_win_unix = 116444736000000000;
+		const int32_t nsec = 10000000;
+		return{ (ft - diff_win_unix) / nsec, (ft - diff_win_unix) % nsec };
+	}
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
 		auto windows_path = realpath(path);
 
-		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS, nullptr));
+		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
 		if (h == INVALID_HANDLE_VALUE)
 		{
 			return -1;
 		}
 
+		FILE_BASIC_INFO file_basic_info;
+		if (!GetFileInformationByHandleEx(h, FileBasicInfo, &file_basic_info, sizeof file_basic_info))
+		{
+			return -1;
+		}
 		FILE_STANDARD_INFO file_std_info;
 		if (!GetFileInformationByHandleEx(h, FileStandardInfo, &file_std_info, sizeof file_std_info))
+		{
+			return -1;
+		}
+		FILE_ATTRIBUTE_TAG_INFO file_attribute_tag_info;
+		if (!GetFileInformationByHandleEx(h, FileAttributeTagInfo, &file_attribute_tag_info, sizeof file_attribute_tag_info))
 		{
 			return -1;
 		}
@@ -157,53 +173,74 @@ namespace Lxss
 			return -1;
 		}
 
-		constexpr size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
-		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
-		Ea.AllocateBytes(EaLength);
-
-		constexpr size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
-		ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
-		EaQuery.AllocateBytes(EaQueryLength);
-		EaQuery->NextEntryOffset = 0;
-		EaQuery->EaNameLength = (UCHAR)strlen(LxssEaName);
-		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, LxssEaName);
-
-		IO_STATUS_BLOCK ea_iob;
-		NTSTATUS ea_status = ZwQueryEaFile(h, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
-		if (NT_ERROR(ea_status))
+		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LXSS_SYMLINK)
 		{
-			SetLastError(ea_status);
-			return -1;
+			buf->st_dev = 0;
+			buf->FileId = file_id_info.FileId;
+			buf->st_nlink = file_std_info.NumberOfLinks;
+			buf->st_atim = FileTimeToUnixTime(file_basic_info.LastAccessTime.QuadPart);
+			buf->st_mtim = FileTimeToUnixTime(file_basic_info.LastWriteTime.QuadPart);
+			buf->st_ctim = FileTimeToUnixTime(file_basic_info.ChangeTime.QuadPart);
+			buf->st_birthtim = {};
+			buf->st_size = file_std_info.EndOfFile.QuadPart;
+			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
+			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
+			buf->st_uid = 0;
+			buf->st_gid = 0;
+			buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
+
+			return 0;
 		}
-		// If EaList != null ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (Ea->EaValueLength != sizeof(LXATTRB))
+		else
 		{
-			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
-			return -1;
+			constexpr size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
+			ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
+			Ea.AllocateBytes(EaLength);
+
+			constexpr size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
+			ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
+			EaQuery.AllocateBytes(EaQueryLength);
+			EaQuery->NextEntryOffset = 0;
+			EaQuery->EaNameLength = (UCHAR)strlen(LxssEaName);
+			ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, LxssEaName);
+
+			IO_STATUS_BLOCK ea_iob;
+			NTSTATUS ea_status = ZwQueryEaFile(h, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
+			if (NT_ERROR(ea_status))
+			{
+				SetLastError(ea_status);
+				return -1;
+			}
+			// If EaList != null ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
+			if (Ea->EaValueLength != sizeof(LXATTRB))
+			{
+				SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
+				return -1;
+			}
+			_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
+			const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
+
+			// Always 0 ?
+			buf->st_dev = 0;
+			buf->FileId = file_id_info.FileId;
+			// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
+			buf->st_nlink = !lxattr->permission.is_directory ? file_std_info.NumberOfLinks : 2;
+			buf->st_atim.tv_sec = lxattr->atime;
+			buf->st_atim.tv_nsec = lxattr->atime_extra;
+			buf->st_mtim.tv_sec = lxattr->mtime;
+			buf->st_mtim.tv_nsec = lxattr->mtime_extra;
+			buf->st_ctim.tv_sec = lxattr->ctime;
+			buf->st_ctim.tv_nsec = lxattr->ctime_extra;
+			buf->st_birthtim.tv_sec = 0;
+			buf->st_birthtim.tv_nsec = 0;
+			buf->st_size = !lxattr->permission.is_directory ? file_std_info.EndOfFile.QuadPart : 0;
+			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
+			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
+			buf->st_uid = lxattr->st_uid;
+			buf->st_gid = lxattr->st_gid;
+			buf->st_mode = lxattr->st_mode;
+
+			return 0;
 		}
-		_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
-		const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
-
-		// Always 0 ?
-		buf->st_dev = 0;
-		buf->FileId = file_id_info.FileId;
-		// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
-		buf->st_nlink = !lxattr->permission.is_directory ? file_std_info.NumberOfLinks : 2;
-		buf->st_atim.tv_sec = lxattr->atime;
-		buf->st_atim.tv_nsec = lxattr->atime_extra;
-		buf->st_mtim.tv_sec = lxattr->mtime;
-		buf->st_mtim.tv_nsec = lxattr->mtime_extra;
-		buf->st_ctim.tv_sec = lxattr->ctime;
-		buf->st_ctim.tv_nsec = lxattr->ctime_extra;
-		buf->st_birthtim.tv_sec = 0;
-		buf->st_birthtim.tv_nsec = 0;
-		buf->st_size = !lxattr->permission.is_directory ? file_std_info.EndOfFile.QuadPart : 0;
-		buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
-		buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
-		buf->st_uid = lxattr->st_uid;
-		buf->st_gid = lxattr->st_gid;
-		buf->st_mode = lxattr->st_mode;
-
-		return 0;
 	}
 }

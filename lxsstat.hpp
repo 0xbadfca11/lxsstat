@@ -16,6 +16,8 @@ constexpr NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
 static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L, "");
 #endif
 
+constexpr ULONG IO_REPARSE_TAG_LXSS_SYMLINK = 0xA000001D;
+
 namespace Lxss
 {
 	constexpr uint32_t S_IFLNK = 020000;
