@@ -54,10 +54,7 @@ namespace Lxss
 	const auto lxss_root = []()->std::wstring
 	{
 		WCHAR temp[MAX_PATH];
-		if (!ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)))
-		{
-			ATL::AtlThrowLastWin32();
-		}
+		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)));
 		return temp;
 	}();
 	std::wstring realpath(std::wstring path)
@@ -98,10 +95,7 @@ namespace Lxss
 			path.insert(0, prefix);
 		}
 		auto stage1 = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-		if (!GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr))
-		{
-			ATL::AtlThrowLastWin32();
-		}
+		ATLENSURE(GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr));
 		std::wstring stage2(stage1.get());
 		if (wcsncmp(stage2.c_str(), prefix, wcslen(prefix)) != 0 && !PathIsUNCW(stage2.c_str()))
 		{
@@ -147,6 +141,22 @@ namespace Lxss
 			return -1;
 		}
 
+		FILE_STANDARD_INFO file_std_info;
+		if (!GetFileInformationByHandleEx(h, FileStandardInfo, &file_std_info, sizeof file_std_info))
+		{
+			return -1;
+		}
+		FILE_STORAGE_INFO file_storage_info;
+		if (!GetFileInformationByHandleEx(h, FileStorageInfo, &file_storage_info, sizeof file_storage_info))
+		{
+			return -1;
+		}
+		FILE_ID_INFO file_id_info;
+		if (!GetFileInformationByHandleEx(h, FileIdInfo, &file_id_info, sizeof file_id_info))
+		{
+			return -1;
+		}
+
 		constexpr size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
 		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
 		Ea.AllocateBytes(EaLength);
@@ -174,27 +184,11 @@ namespace Lxss
 		_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
 		const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
 
-		auto file_std_info = std::make_unique<FILE_STANDARD_INFO>();
-		if (!GetFileInformationByHandleEx(h, FileStandardInfo, file_std_info.get(), sizeof(FILE_STANDARD_INFO)))
-		{
-			return -1;
-		}
-		auto file_storage_info = std::make_unique<FILE_STORAGE_INFO>();
-		if (!GetFileInformationByHandleEx(h, FileStorageInfo, file_storage_info.get(), sizeof(FILE_STORAGE_INFO)))
-		{
-			return -1;
-		}
-		auto file_id_info = std::make_unique<FILE_ID_INFO>();
-		if (!GetFileInformationByHandleEx(h, FileIdInfo, file_id_info.get(), sizeof(FILE_ID_INFO)))
-		{
-			return -1;
-		}
-
 		// Always 0 ?
 		buf->st_dev = 0;
-		buf->FileId = file_id_info->FileId;
+		buf->FileId = file_id_info.FileId;
 		// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
-		buf->st_nlink = !lxattr->permission.is_directory ? file_std_info->NumberOfLinks : 2;
+		buf->st_nlink = !lxattr->permission.is_directory ? file_std_info.NumberOfLinks : 2;
 		buf->st_atim.tv_sec = lxattr->atime;
 		buf->st_atim.tv_nsec = lxattr->atime_extra;
 		buf->st_mtim.tv_sec = lxattr->mtime;
@@ -203,9 +197,9 @@ namespace Lxss
 		buf->st_ctim.tv_nsec = lxattr->ctime_extra;
 		buf->st_birthtim.tv_sec = 0;
 		buf->st_birthtim.tv_nsec = 0;
-		buf->st_size = !lxattr->permission.is_directory ? file_std_info->EndOfFile.QuadPart : 0;
-		buf->st_blksize = file_storage_info->PhysicalBytesPerSectorForPerformance;
-		buf->st_blocks = file_std_info->AllocationSize.QuadPart / 512;
+		buf->st_size = !lxattr->permission.is_directory ? file_std_info.EndOfFile.QuadPart : 0;
+		buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
+		buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 		buf->st_uid = lxattr->st_uid;
 		buf->st_gid = lxattr->st_gid;
 		buf->st_mode = lxattr->st_mode;

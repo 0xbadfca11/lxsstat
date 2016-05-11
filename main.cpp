@@ -117,7 +117,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			);
 			printf(
 				"Access: (%u%u%u%u/%s)  Uid: (% 5u/--------)   Gid: (% 5u/--------)\n",
-				((buf.st_mode & Lxss::S_ISVTX) ? 1 : 0) | ((buf.st_mode & Lxss::S_ISGID) ? 2 : 0) | ((buf.st_mode & Lxss::S_ISUID) ? 4 : 0),
+				(buf.st_mode & (Lxss::S_ISVTX & Lxss::S_ISGID & Lxss::S_ISUID)) >> 9,
 				(buf.st_mode & Lxss::S_IRWXU) >> 6,
 				(buf.st_mode & Lxss::S_IRWXG) >> 3,
 				buf.st_mode & Lxss::S_IRWXO,
@@ -125,7 +125,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				buf.st_uid,
 				buf.st_gid
 			);
-			const struct _timespec64 (&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
+			const struct _timespec64(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
 			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };
 			for (int j = 0; j < _countof(mactime); ++j)
 			{
