@@ -11,6 +11,13 @@
 #include <crtdbg.h>
 #include "lxsstat.hpp"
 
+ATL::CHeapPtr<WCHAR> GetWindowsError(ULONG error_code = GetLastError())
+{
+	ATL::CHeapPtr<WCHAR> msg;
+	ATLENSURE(msg.Allocate(USHRT_MAX));
+	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, error_code, 0, msg, USHRT_MAX, nullptr));
+	return msg;
+}
 int __cdecl wmain(int argc, wchar_t* argv[])
 {
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
@@ -36,7 +43,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			}
 			else
 			{
-				fprintf(stderr, "%ls\nGetLastError()==0x%08lx\n", windows_path.c_str(), error);
+				fprintf(stderr, "%ls\n%ls", windows_path.c_str(), (PCWSTR)GetWindowsError(error));
 			}
 		}
 		else
@@ -55,15 +62,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					}
 					else
 					{
-						ULONG error = GetLastError();
-						if (error == ERROR_SHARING_VIOLATION)
-						{
-							puts("  ->  ?\?\?\?(ERROR_SHARING_VIOLATION)");
-						}
-						else
-						{
-							printf("  ->  ?\?\?\?(%lx)", error);
-						}
+						printf("  ->  ?\?\?\?\?\?\?\?\n%ls", (PCWSTR)GetWindowsError());
 						if (h == INVALID_HANDLE_VALUE)
 						{
 							h.Detach();
