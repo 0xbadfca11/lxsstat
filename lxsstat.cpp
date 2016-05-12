@@ -62,14 +62,14 @@ namespace Lxss
 		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
 		if (path[0] == L'/')
 		{
-			for (size_t pos = path.find(L'#'); pos != std::string::npos; pos = path.find(L'#', pos))
+			const WCHAR fixups[] = LR"(#<>:"\|?*)";
+			for (size_t pos = path.find_first_of(fixups); pos != std::string::npos; pos = path.find_first_of(fixups, pos))
 			{
-				path.insert(++pos, L"0023");
-			}
-			for (size_t pos = path.find(L':'); pos != std::string::npos; pos = path.find(L':', pos))
-			{
+				WCHAR buf[5];
+				ATLENSURE(swprintf_s(buf, L"%04X", path[pos]) == _countof(buf) - 1);
 				path[pos] = L'#';
-				path.insert(++pos, L"003A");
+				path.insert(++pos, buf);
+				pos += _countof(buf) - 1;
 			}
 			bool need_reloc = false;
 			const PCWSTR reloc_directory[] = {
@@ -224,7 +224,7 @@ namespace Lxss
 			buf->st_dev = 0;
 			buf->FileId = file_id_info.FileId;
 			// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
-			buf->st_nlink = !lxattr->permission.is_directory ? file_std_info.NumberOfLinks : 2;
+			buf->st_nlink = !S_ISDIR(lxattr->st_mode) ? file_std_info.NumberOfLinks : 2;
 			buf->st_atim.tv_sec = lxattr->atime;
 			buf->st_atim.tv_nsec = lxattr->atime_extra;
 			buf->st_mtim.tv_sec = lxattr->mtime;
@@ -233,7 +233,7 @@ namespace Lxss
 			buf->st_ctim.tv_nsec = lxattr->ctime_extra;
 			buf->st_birthtim.tv_sec = 0;
 			buf->st_birthtim.tv_nsec = 0;
-			buf->st_size = !lxattr->permission.is_directory ? file_std_info.EndOfFile.QuadPart : 0;
+			buf->st_size = !S_ISDIR(lxattr->st_mode) ? file_std_info.EndOfFile.QuadPart : 0;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 			buf->st_uid = lxattr->st_uid;
