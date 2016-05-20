@@ -103,23 +103,28 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					puts("regular empty file");
 				}
 			}
+			else if (Lxss::S_ISCHR(buf.st_mode))
+			{
+				puts("character special file");
+			}
 			else
 			{
 				puts("unknown");
 			}
 			printf(
-				"Device: %uh/%ud   Inode: %llu  Links: %u\n",
+				!Lxss::S_ISCHR(buf.st_mode)
+				? "Device: %uh/%ud   Inode: %llu  Links: %u\n"
+				: "Device: %uh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
 				Lxss::major(buf.st_dev),
 				Lxss::minor(buf.st_dev),
 				buf.st_ino,
-				buf.st_nlink
+				buf.st_nlink,
+				HIBYTE(buf.st_rdev),
+				LOBYTE(buf.st_rdev)
 			);
 			printf(
-				"Access: (%u%u%u%u/%s)  Uid: (% 5u/--------)   Gid: (% 5u/--------)\n",
-				(buf.st_mode & (Lxss::S_ISVTX & Lxss::S_ISGID & Lxss::S_ISUID)) >> 9,
-				(buf.st_mode & Lxss::S_IRWXU) >> 6,
-				(buf.st_mode & Lxss::S_IRWXG) >> 3,
-				buf.st_mode & Lxss::S_IRWXO,
+				"Access: (%04o/%s)  Uid: (% 5u/--------)   Gid: (% 5u/--------)\n",
+				buf.st_mode & 07777,
 				Lxss::mode_tostring(buf.st_mode).data(),
 				buf.st_uid,
 				buf.st_gid

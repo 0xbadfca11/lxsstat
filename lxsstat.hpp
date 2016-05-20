@@ -17,10 +17,11 @@ static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L, "");
 #endif
 
 constexpr ULONG IO_REPARSE_TAG_LXSS_SYMLINK = 0xA000001D;
+static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LXSS_SYMLINK), "");
 
 namespace Lxss
 {
-	constexpr uint32_t S_IFLNK = 020000;
+	constexpr uint32_t S_IFLNK = 0120000;
 	constexpr uint32_t S_ISUID = 04000;
 	constexpr uint32_t S_ISGID = 02000;
 	constexpr uint32_t S_ISVTX = 01000;
@@ -38,7 +39,7 @@ namespace Lxss
 	constexpr uint32_t S_IXOTH = 01;
 	static bool inline S_ISLNK(uint32_t st_mode)
 	{
-		return (st_mode & S_IFLNK) != 0;
+		return (st_mode & S_IFMT) == S_IFLNK;
 	}
 	static bool inline S_ISDIR(uint32_t st_mode)
 	{
@@ -47,6 +48,10 @@ namespace Lxss
 	static bool inline S_ISREG(uint32_t st_mode)
 	{
 		return (st_mode & S_IFMT) == S_IFREG;
+	}
+	static bool inline S_ISCHR(uint32_t st_mode)
+	{
+		return (st_mode & S_IFMT) == S_IFCHR;
 	}
 	static uint32_t inline major(uint32_t st_dev)
 	{
@@ -74,6 +79,7 @@ namespace Lxss
 		uint64_t st_blocks;
 		uint32_t st_uid;
 		uint32_t st_gid;
+		uint32_t st_rdev;
 		uint32_t st_mode;
 	};
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
@@ -83,26 +89,10 @@ namespace Lxss
 	struct LXATTRB
 	{
 		uint32_t unknown1;
-		union
-		{
-			uint32_t st_mode;
-			struct
-			{
-				uint32_t other : 3;
-				uint32_t group : 3;
-				uint32_t owner : 3;
-				uint32_t sticky : 1;
-				uint32_t sgid : 1;
-				uint32_t suid : 1;
-				uint32_t unknown : 1;
-				uint32_t is_symlink : 1;
-				uint32_t is_directory : 1;
-				uint32_t is_file : 1;
-			} permission;
-		};
+		uint32_t st_mode;
 		uint32_t st_uid;
 		uint32_t st_gid;
-		uint32_t unknown2;
+		uint32_t st_rdev;
 		uint32_t atime_extra;
 		uint32_t mtime_extra;
 		uint32_t ctime_extra;
@@ -111,7 +101,6 @@ namespace Lxss
 		uint64_t ctime;
 	};
 #include <poppack.h>
-	static_assert(sizeof(LXATTRB::permission) == sizeof(uint32_t), "");
 	static_assert(sizeof(LXATTRB) == 56, "");
 
 	constexpr char LxssEaName[] = "LXATTRB";

@@ -111,25 +111,20 @@ namespace Lxss
 			return{ "lrwxrwxrwx" };
 		}
 
-		std::array<char, 11> result;
-		std::get<0>(result) = S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : '?';
-		std::get<1>(result) = st_mode & S_IRUSR ? 'r' : '-';
-		std::get<2>(result) = st_mode & S_IWUSR ? 'w' : '-';
-		std::get<3>(result) = st_mode & S_ISUID
-			? st_mode & S_IXUSR ? 's' : 'S'
-			: st_mode & S_IXUSR ? 'x' : '-';
-		std::get<4>(result) = st_mode & S_IRGRP ? 'r' : '-';
-		std::get<5>(result) = st_mode & S_IWGRP ? 'w' : '-';
-		std::get<6>(result) = st_mode & S_ISGID
-			? st_mode & S_IXGRP ? 's' : 'S'
-			: st_mode & S_IXGRP ? 'x' : '-';
-		std::get<7>(result) = st_mode & S_IROTH ? 'r' : '-';
-		std::get<8>(result) = st_mode & S_IWOTH ? 'w' : '-';
-		std::get<9>(result) = st_mode & S_ISVTX
-			? st_mode & S_IXOTH ? 't' : 'T'
-			: st_mode & S_IXOTH ? 'x' : '-';
-		std::get<10>(result) = '\0';
-		return result;
+		return
+		{
+			/*[0]*/ S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : S_ISCHR(st_mode) ? 'c' : '?',
+			/*[1]*/ st_mode & S_IRUSR ? 'r' : '-',
+			/*[2]*/ st_mode & S_IWUSR ? 'w' : '-',
+			/*[3]*/ st_mode & S_ISUID ? st_mode & S_IXUSR ? 's' : 'S' : st_mode & S_IXUSR ? 'x' : '-',
+			/*[4]*/ st_mode & S_IRGRP ? 'r' : '-',
+			/*[5]*/ st_mode & S_IWGRP ? 'w' : '-',
+			/*[6]*/ st_mode & S_ISGID ? st_mode & S_IXGRP ? 's' : 'S' : st_mode & S_IXGRP ? 'x' : '-',
+			/*[7]*/ st_mode & S_IROTH ? 'r' : '-',
+			/*[8]*/ st_mode & S_IWOTH ? 'w' : '-',
+			/*[9]*/ st_mode & S_ISVTX ? st_mode & S_IXOTH ? 't' : 'T' : st_mode & S_IXOTH ? 'x' : '-',
+			'\0'
+		};
 	}
 	struct _timespec64 FileTimeToUnixTime(LONG64 ft)
 	{
@@ -187,6 +182,7 @@ namespace Lxss
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 			buf->st_uid = 0;
 			buf->st_gid = 0;
+			buf->st_rdev = 0;
 			buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
 
 			return 0;
@@ -219,6 +215,8 @@ namespace Lxss
 			}
 			_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
 			const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
+			_ASSERTE(lxattr->unknown1 == 0x10000);
+			_ASSERTE(HIWORD(lxattr->st_mode) == 0);
 
 			// Always 0 ?
 			buf->st_dev = 0;
@@ -233,12 +231,13 @@ namespace Lxss
 			buf->st_ctim.tv_nsec = lxattr->ctime_extra;
 			buf->st_birthtim.tv_sec = 0;
 			buf->st_birthtim.tv_nsec = 0;
-			buf->st_size = !S_ISDIR(lxattr->st_mode) ? file_std_info.EndOfFile.QuadPart : 0;
+			buf->st_size = (S_ISREG(lxattr->st_mode) || S_ISLNK(lxattr->st_mode)) ? file_std_info.EndOfFile.QuadPart : 0;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 			buf->st_uid = lxattr->st_uid;
 			buf->st_gid = lxattr->st_gid;
-			buf->st_mode = lxattr->st_mode;
+			buf->st_rdev = !lxattr->st_rdev ? 0 : ((lxattr->st_rdev >> 12) & 0xff00) | (lxattr->st_rdev & 0xff);
+			buf->st_mode = lxattr->st_mode | (!lxattr->st_rdev ? 0 : S_IFCHR);
 
 			return 0;
 		}
