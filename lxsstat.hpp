@@ -53,14 +53,6 @@ namespace Lxss
 	{
 		return (st_mode & S_IFMT) == S_IFCHR;
 	}
-	static uint32_t inline major(uint32_t st_dev)
-	{
-		return HIWORD(st_dev);
-	}
-	static uint32_t inline minor(uint32_t st_dev)
-	{
-		return LOWORD(st_dev);
-	}
 	struct stat
 	{
 		uint32_t st_dev;

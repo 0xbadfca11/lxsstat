@@ -113,10 +113,10 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			}
 			printf(
 				!Lxss::S_ISCHR(buf.st_mode)
-				? "Device: %uh/%ud   Inode: %llu  Links: %u\n"
-				: "Device: %uh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
-				Lxss::major(buf.st_dev),
-				Lxss::minor(buf.st_dev),
+				? "Device: %xh/%ud   Inode: %llu  Links: %u\n"
+				: "Device: %xh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
+				buf.st_dev,
+				buf.st_dev,
 				buf.st_ino,
 				buf.st_nlink,
 				HIBYTE(buf.st_rdev),
