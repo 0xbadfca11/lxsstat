@@ -113,7 +113,7 @@ namespace Lxss
 
 		return
 		{
-			/*[0]*/ S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : S_ISCHR(st_mode) ? 'c' : '?',
+			/*[0]*/ S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : S_ISCHR(st_mode) ? 'c' : S_ISFIFO(st_mode) ? 'p' : '?',
 			/*[1]*/ st_mode & S_IRUSR ? 'r' : '-',
 			/*[2]*/ st_mode & S_IWUSR ? 'w' : '-',
 			/*[3]*/ st_mode & S_ISUID ? st_mode & S_IXUSR ? 's' : 'S' : st_mode & S_IXUSR ? 'x' : '-',

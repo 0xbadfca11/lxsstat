@@ -22,6 +22,7 @@ static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LXSS_SYMLINK), "");
 namespace Lxss
 {
 	constexpr uint32_t S_IFLNK = 0120000;
+	constexpr uint32_t S_IFIFO = 010000;
 	constexpr uint32_t S_ISUID = 04000;
 	constexpr uint32_t S_ISGID = 02000;
 	constexpr uint32_t S_ISVTX = 01000;
@@ -52,6 +53,10 @@ namespace Lxss
 	static bool inline S_ISCHR(uint32_t st_mode)
 	{
 		return (st_mode & S_IFMT) == S_IFCHR;
+	}
+	static bool inline S_ISFIFO(uint32_t st_mode)
+	{
+		return (st_mode & S_IFMT) == S_IFIFO;
 	}
 	struct stat
 	{

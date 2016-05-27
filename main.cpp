@@ -107,6 +107,10 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			{
 				puts("character special file");
 			}
+			else if (Lxss::S_ISFIFO(buf.st_mode))
+			{
+				puts("fifo");
+			}
 			else
 			{
 				puts("unknown");
