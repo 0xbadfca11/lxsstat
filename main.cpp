@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <crtdbg.h>
 #include "lxsstat.hpp"
+#include "fileopen.hpp"
 
 ATL::CHeapPtr<WCHAR> GetWindowsError(ULONG error_code = GetLastError())
 {
@@ -51,11 +52,16 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			printf("  File: '%ls'", argv[i]);
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
+				static_assert(PATHCCH_MAX_CCH <= ULONG_MAX, "");
 				if (buf.st_size <= PATHCCH_MAX_CCH)
 				{
 					ATL::CTempBuffer<BYTE> buffer(buf.st_size);
 					ULONG read_size;
-					ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
+					if (!h)
+					{
+						h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+					}
 					if (h != INVALID_HANDLE_VALUE && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
 						printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);

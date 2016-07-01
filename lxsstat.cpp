@@ -16,6 +16,7 @@
 #include <string>
 #include <cstdint>
 #include "lxsstat.hpp"
+#include "fileopen.hpp"
 #pragma comment(lib, "pathcch")
 #pragma comment(lib, "ntdll")
 
@@ -136,10 +137,15 @@ namespace Lxss
 	{
 		auto windows_path = realpath(path);
 
-		ATL::CHandle h(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-		if (h == INVALID_HANDLE_VALUE)
+		ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
+		if (!h)
 		{
-			return -1;
+			h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+			if (h == INVALID_HANDLE_VALUE)
+			{
+				h.Detach();
+				return -1;
+			}
 		}
 
 		FILE_BASIC_INFO file_basic_info;
