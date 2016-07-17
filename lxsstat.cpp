@@ -61,9 +61,12 @@ namespace Lxss
 	std::wstring realpath(std::wstring path)
 	{
 		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
+		const WCHAR prefix[] = LR"(\\?\)";
 		if (path[0] == L'/')
 		{
-			const WCHAR fixups[] = LR"(#<>:"\|?*)";
+			const WCHAR fixups[] = LR"(#<>:"\|?*)"
+				L"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F"
+				L"\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F";
 			for (size_t pos = path.find_first_of(fixups); pos != std::string::npos; pos = path.find_first_of(fixups, pos))
 			{
 				WCHAR buf[5];
@@ -90,20 +93,19 @@ namespace Lxss
 			}
 			path.insert(0, !need_reloc ? lxss_root + L"\\rootfs" : lxss_root);
 		}
-		const WCHAR prefix[] = LR"(\\?\)";
-		if (!PathIsRelativeW(path.c_str()) && wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0 && path[0] != '\\')
+		else if (PathIsRelativeW(path.c_str()) || (path[0] == '\\' && wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0))
+		{
+			auto temp = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
+			ATLENSURE(GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, temp.get(), nullptr));
+			path = temp.get();
+		}
+		if (wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0)
 		{
 			path.insert(0, prefix);
 		}
-		auto stage1 = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-		ATLENSURE(GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, stage1.get(), nullptr));
-		std::wstring stage2(stage1.get());
-		if (wcsncmp(stage2.c_str(), prefix, wcslen(prefix)) != 0 && !PathIsUNCW(stage2.c_str()))
-		{
-			stage2.insert(0, prefix);
-		}
-		_RPT1(_CRT_WARN, "realpath(>%ls)\n", stage2.c_str());
-		return stage2;
+		std::replace(path.begin(), path.end(), '/', '\\');
+		_RPT1(_CRT_WARN, "realpath(>%ls)\n", path.c_str());
+		return path;
 	}
 	std::array<char, 11> mode_tostring(uint32_t st_mode)
 	{
