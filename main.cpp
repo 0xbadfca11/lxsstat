@@ -61,6 +61,11 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					if (!h)
 					{
 						h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+						if (h == INVALID_HANDLE_VALUE)
+						{
+							h.Detach();
+							h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+						}
 					}
 					if (h != INVALID_HANDLE_VALUE && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{

@@ -144,7 +144,12 @@ namespace Lxss
 			if (h == INVALID_HANDLE_VALUE)
 			{
 				h.Detach();
-				return -1;
+				h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+				if (h == INVALID_HANDLE_VALUE)
+				{
+					h.Detach();
+					return -1;
+				}
 			}
 		}
 
