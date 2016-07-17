@@ -96,7 +96,7 @@ ATL::CHandle2 OpenAtNoCase(const HANDLE directory, const PCWSTR name)
 	InitializeObjectAttributes(&obj_attr, &unicode_name, OBJ_CASE_INSENSITIVE, directory, nullptr);
 	IO_STATUS_BLOCK iob;
 	HANDLE h;
-	NTSTATUS status = NtOpenFile(&h, FILE_GENERIC_READ, &obj_attr, &iob, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT);
+	NTSTATUS status = NtOpenFile(&h, FILE_GENERIC_READ, &obj_attr, &iob, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT);
 	if (NT_SUCCESS(status))
 	{
 		return h;
