@@ -22,7 +22,7 @@
     <ProjectGuid>{2CF44751-72BC-43EF-ABD1-F0F3C8957A2D}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>lxsstat</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.10586.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -145,6 +145,9 @@
   <ItemGroup>
     <ClInclude Include="fileopen.hpp" />
     <ClInclude Include="lxsstat.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="AutoVisualizer.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
