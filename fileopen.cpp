@@ -160,7 +160,15 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 		SetLastError(ERROR_NOT_SUPPORTED);
 		return nullptr;
 	}
-	std::list<ATL::CStringW> components;
+	struct node
+	{
+		node() = default;
+		node(ATL::CStringW name) : name(name) {}
+		~node() = default;
+		ATL::CStringW name;
+		ATL::CHandle2 handle;
+	};
+	std::list<node> components;
 	for (ATL::CStringW path; path = full_path.Tokenize(L"\\", pos), pos != -1;)
 	{
 		if (wcscmp(path, L".") == 0)
@@ -177,28 +185,27 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 		}
 	}
 	ATL::CHandle2 parent = volume;
-	ATL::CHandle2 node = nullptr;
 	int visited = 0;
 	for (auto it = components.begin(), end = components.end(); it != end; ++it)
 	{
-		if (std::unique_ptr<FILE_ID_128> child = IterateDirectory(parent, *it))
+		if (std::unique_ptr<FILE_ID_128> child = IterateDirectory(parent, (*it).name))
 		{
 			FILE_ID_DESCRIPTOR Id = { sizeof Id };
 			Id.Type = ExtendedFileIdType;
 			Id.ExtendedFileId = *child;
-			node = OpenFileById(volume, &Id, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+			(*it).handle = OpenFileById(volume, &Id, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
 		}
 		else
 		{
-			node = OpenAtNoCase(parent, *it);
+			(*it).handle = OpenAtNoCase(parent, (*it).name);
 		}
-		if (!node)
+		if (!(*it).handle)
 		{
 			_CrtDbgBreak();
 			return nullptr;
 		}
 		FILE_ATTRIBUTE_TAG_INFO attr_tag;
-		if (GetFileInformationByHandleEx(node, FileAttributeTagInfo, &attr_tag, sizeof attr_tag) && attr_tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+		if (GetFileInformationByHandleEx((*it).handle, FileAttributeTagInfo, &attr_tag, sizeof attr_tag) && attr_tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
 		{
 			if (++visited >= 64)
 			{
@@ -209,11 +216,11 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			ATL::CHeapPtr<REPARSE_DATA_BUFFER> reparse_point;
 			ATLENSURE(reparse_point.AllocateBytes(MAXIMUM_REPARSE_DATA_BUFFER_SIZE));
 			ULONG junk;
-			ATLENSURE(DeviceIoControl(node, FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_point, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr));
+			ATLENSURE(DeviceIoControl((*it).handle, FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_point, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr));
 			if (reparse_point->ReparseTag == IO_REPARSE_TAG_SYMLINK)
 			{
 				ATL::CStringW sym_path(&reparse_point->SymbolicLinkReparseBuffer.PathBuffer[reparse_point->SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR)], reparse_point->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(WCHAR));
-				auto sym_it = it;
+				components.erase(it--);
 				int sym_pos = reparse_point->SymbolicLinkReparseBuffer.Flags == SYMLINK_FLAG_RELATIVE ? 0 : 4;
 				for (ATL::CStringW path; path = sym_path.Tokenize(L"\\", sym_pos), sym_pos != -1; )
 				{
@@ -223,23 +230,28 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 					}
 					else if (wcscmp(path, L"..") == 0)
 					{
-						components.pop_back();
+						components.erase(it--);
 					}
 					else
 					{
-						components.emplace_back(path);
+						components.emplace(std::next(it), path);
 					}
 				}
 				if (reparse_point->SymbolicLinkReparseBuffer.Flags == 0)
 				{
 					_ASSERTE(wcsncmp(sym_path, LR"(\??\)", 4) == 0);
-					(*++it).AppendChar(L'\\');
-					volume = CreateFileW(*it, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+					(*++it).name.AppendChar(L'\\');
+					volume = CreateFileW((*it).name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 					parent = volume;
 				}
 				else if (reparse_point->SymbolicLinkReparseBuffer.Flags == SYMLINK_FLAG_RELATIVE)
 				{
-					/* No thing to do. */
+					it = components.begin();
+					while (it != end && (*it).handle)
+					{
+						++it;
+					}
+					parent = (*--it).handle;
 				}
 				else
 				{
@@ -263,8 +275,8 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 					{
 						mount_it = components.emplace(mount_it, path);
 					}
-					(*++it).AppendChar(L'\\');
-					volume = CreateFileW(*it, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+					(*++it).name.AppendChar(L'\\');
+					volume = CreateFileW((*it).name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 					parent = volume;
 				}
 				else
@@ -277,7 +289,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			{
 				if (std::next(it) == components.end())
 				{
-					return node.Detach();
+					return (*it).handle.Detach();
 				}
 				else
 				{
@@ -288,8 +300,8 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 		}
 		else
 		{
-			parent = node;
+			parent = (*it).handle;
 		}
 	}
-	return node.Detach();
+	return (*std::prev(components.end())).handle.Detach();
 }
