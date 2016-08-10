@@ -181,7 +181,7 @@ namespace Lxss
 			return -1;
 		}
 
-		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LXSS_SYMLINK)
+		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
 		{
 			buf->st_dev = 0;
 			buf->FileId = file_id_info.FileId;
