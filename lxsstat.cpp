@@ -49,6 +49,11 @@ struct FILE_GET_EA_INFORMATION
 constexpr size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
 constexpr size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 #pragma endregion
+EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
+	_In_ POSVERSIONINFOW	VersionInfo,
+	_In_ ULONG	TypeMask,
+	_In_ ULONGLONG	ConditionMask
+);
 
 namespace Lxss
 {
@@ -134,6 +139,33 @@ namespace Lxss
 		const int64_t diff_win_unix = 116444736000000000;
 		const int32_t nsec = 10000000;
 		return{ (ft - diff_win_unix) / nsec, (ft - diff_win_unix) % nsec };
+	}
+	bool IsBuildNumberGreaterThanOrEqualTo(ULONG build)
+	{
+		OSVERSIONINFOW ver_info;
+		ver_info.dwOSVersionInfoSize = sizeof ver_info;
+		ver_info.dwMajorVersion = 10;
+		ver_info.dwMinorVersion = 0;
+		ver_info.dwBuildNumber = build;
+		ULONGLONG cond_mask = 0;
+		VER_SET_CONDITION(cond_mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
+		VER_SET_CONDITION(cond_mask, VER_MINORVERSION, VER_GREATER_EQUAL);
+		VER_SET_CONDITION(cond_mask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+		ULONG error = RtlNtStatusToDosError(RtlVerifyVersionInfo(&ver_info, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, cond_mask));
+		SetLastError(error);
+		switch (error)
+		{
+		case ERROR_SUCCESS:
+			return true;
+		case ERROR_REVISION_MISMATCH:
+			return false;
+		default:
+			ATL::AtlThrowLastWin32();
+		}
+	}
+	uint32_t DirectoryConstantLinkCount()
+	{
+		return IsBuildNumberGreaterThanOrEqualTo(14946) ? 0 : 2;
 	}
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
@@ -231,11 +263,10 @@ namespace Lxss
 			_ASSERTE(lxattr->unknown1 == 0x10000);
 			_ASSERTE(HIWORD(lxattr->st_mode) == 0);
 
-			// Always 0 ?
+			// issue #3
 			buf->st_dev = 0;
 			buf->FileId = file_id_info.FileId;
-			// When directory, Linux subsystem always 2. Wont add each sub directory '..'.
-			buf->st_nlink = !S_ISDIR(lxattr->st_mode) ? file_std_info.NumberOfLinks : 2;
+			buf->st_nlink = !S_ISDIR(lxattr->st_mode) ? file_std_info.NumberOfLinks : DirectoryConstantLinkCount();
 			buf->st_atim.tv_sec = lxattr->atime;
 			buf->st_atim.tv_nsec = lxattr->atime_extra;
 			buf->st_mtim.tv_sec = lxattr->mtime;
