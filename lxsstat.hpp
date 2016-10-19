@@ -5,6 +5,7 @@
 #include <winternl.h>
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -42,23 +43,23 @@ namespace Lxss
 	constexpr uint32_t S_IROTH = 04;
 	constexpr uint32_t S_IWOTH = 02;
 	constexpr uint32_t S_IXOTH = 01;
-	static bool inline S_ISLNK(uint32_t st_mode)
+	static bool inline S_ISLNK(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFLNK;
 	}
-	static bool inline S_ISDIR(uint32_t st_mode)
+	static bool inline S_ISDIR(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFDIR;
 	}
-	static bool inline S_ISREG(uint32_t st_mode)
+	static bool inline S_ISREG(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFREG;
 	}
-	static bool inline S_ISCHR(uint32_t st_mode)
+	static bool inline S_ISCHR(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFCHR;
 	}
-	static bool inline S_ISFIFO(uint32_t st_mode)
+	static bool inline S_ISFIFO(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFIFO;
 	}
@@ -85,7 +86,10 @@ namespace Lxss
 	};
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
 	std::wstring realpath(std::wstring path);
-	std::array<char, 11> mode_tostring(uint32_t st_mode);
+	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept;
+	std::unordered_map<uint32_t, const std::string> ParsePasswdLikeFile(const std::wstring& file);
+	PCSTR UserNameFromUID(uint32_t uid);
+	PCSTR GroupNameFromGID(uint32_t gid);
 #include <pshpack1.h>
 	struct LXATTRB
 	{

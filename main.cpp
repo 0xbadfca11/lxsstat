@@ -58,26 +58,13 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					ATL::CTempBuffer<BYTE> buffer(buf.st_size);
 					ULONG read_size;
 					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
-					if (!h)
-					{
-						h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-						if (h == INVALID_HANDLE_VALUE)
-						{
-							h.Detach();
-							h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-						}
-					}
-					if (h != INVALID_HANDLE_VALUE && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
+					if (h && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
 						printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);
 					}
 					else
 					{
 						printf("  ->  ?\?\?\?\?\?\?\?\n%ls", (PCWSTR)GetWindowsError());
-						if (h == INVALID_HANDLE_VALUE)
-						{
-							h.Detach();
-						}
 					}
 				}
 				else
@@ -138,11 +125,13 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				LOBYTE(buf.st_rdev)
 			);
 			printf(
-				"Access: (%04o/%s)  Uid: (% 5u/--------)   Gid: (% 5u/--------)\n",
+				"Access: (%04o/%s)  Uid: (% 5u/% 8s)   Gid: (% 5u/% 8s)\n",
 				buf.st_mode & 07777,
 				Lxss::mode_tostring(buf.st_mode).data(),
 				buf.st_uid,
-				buf.st_gid
+				Lxss::UserNameFromUID(buf.st_uid),
+				buf.st_gid,
+				Lxss::GroupNameFromGID(buf.st_gid)
 			);
 			const struct _timespec64(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
 			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };

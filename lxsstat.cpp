@@ -14,7 +14,10 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <cstdint>
+#include <fcntl.h>
+#include <io.h>
 #include "lxsstat.hpp"
 #include "fileopen.hpp"
 #pragma comment(lib, "pathcch")
@@ -112,7 +115,7 @@ namespace Lxss
 		_RPT1(_CRT_WARN, "realpath(>%ls)\n", path.c_str());
 		return path;
 	}
-	std::array<char, 11> mode_tostring(uint32_t st_mode)
+	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept
 	{
 		if (S_ISLNK(st_mode))
 		{
@@ -134,11 +137,12 @@ namespace Lxss
 			'\0'
 		};
 	}
-	struct _timespec64 FileTimeToUnixTime(LONG64 ft)
+	struct _timespec64 FileTimeToUnixTime(LONG64 ft) noexcept
 	{
 		const int64_t diff_win_unix = 116444736000000000;
-		const int32_t nsec = 10000000;
-		return{ (ft - diff_win_unix) / nsec, (ft - diff_win_unix) % nsec };
+		const int32_t unit = 10000000;
+		const int32_t nsec_per_unit = 100;
+		return{ (ft - diff_win_unix) / unit, (ft - diff_win_unix) % unit * nsec_per_unit };
 	}
 	bool IsBuildNumberGreaterThanOrEqualTo(ULONG build)
 	{
@@ -174,17 +178,7 @@ namespace Lxss
 		ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
 		if (!h)
 		{
-			h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-			if (h == INVALID_HANDLE_VALUE)
-			{
-				h.Detach();
-				h.Attach(CreateFileW(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
-				if (h == INVALID_HANDLE_VALUE)
-				{
-					h.Detach();
-					return -1;
-				}
-			}
+			return -1;
 		}
 
 		FILE_BASIC_INFO file_basic_info;
@@ -215,7 +209,7 @@ namespace Lxss
 
 		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
 		{
-			buf->st_dev = 0;
+			buf->st_dev = 14;
 			buf->FileId = file_id_info.FileId;
 			buf->st_nlink = file_std_info.NumberOfLinks;
 			buf->st_atim = FileTimeToUnixTime(file_basic_info.LastAccessTime.QuadPart);
@@ -285,5 +279,85 @@ namespace Lxss
 
 			return 0;
 		}
+	}
+	const std::unordered_map<uint32_t, const std::string> uids = ParsePasswdLikeFile(realpath(L"/etc/passwd"));
+	const std::unordered_map<uint32_t, const std::string> gids = ParsePasswdLikeFile(realpath(L"/etc/group"));
+	std::unordered_map<uint32_t, const std::string> ParsePasswdLikeFile(const std::wstring& file)
+	{
+		HANDLE h = OpenFileCaseSensitive(file.c_str());
+		if (!h)
+		{
+			return{};
+		}
+		int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);
+		if (fd == -1)
+		{
+			CloseHandle(h);
+			return{};
+		}
+		struct fileclose
+		{
+			void operator()(FILE* f) noexcept
+			{
+				fclose(f);
+			}
+		};
+		std::unique_ptr<FILE, fileclose> f(_fdopen(fd, "r"));
+		if (!f)
+		{
+			_close(fd);
+			return{};
+		}
+		std::unordered_map<uint32_t, const std::string> ids;
+		for (;;)
+		{
+			std::string line;
+			for (;;)
+			{
+				char buf[0x80];
+				if (!fgets(buf, _countof(buf), f.get()))
+				{
+					return ids;
+				}
+				line += buf;
+				if (feof(f.get()))
+				{
+					break;
+				}
+				else if (std::find(std::cbegin(buf), std::cend(buf), '\n') == std::cend(buf))
+				{
+					continue;
+				}
+				else
+				{
+					break;
+				}
+			}
+			auto const head = line.data();
+			size_t name_length = line.find(":");
+			size_t id_pos = line.find(":", name_length + 1) + 1;
+			ids.emplace(std::piecewise_construct, std::make_tuple(std::stoi(head + id_pos)), std::make_tuple(head, name_length));
+		}
+	}
+	PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
+	{
+		_ASSERTE(ids.size() > 0);
+		auto it = ids.find(id);
+		if (it != ids.end())
+		{
+			return it->second.c_str();
+		}
+		else
+		{
+			return "--------";
+		}
+	}
+	PCSTR UserNameFromUID(uint32_t uid)
+	{
+		return NameFromIDs(uids, uid);
+	}
+	PCSTR GroupNameFromGID(uint32_t gid)
+	{
+		return NameFromIDs(gids, gid);
 	}
 }

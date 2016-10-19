@@ -5,7 +5,6 @@
 #include <atlstr.h>
 #include <windows.h>
 #include <winioctl.h>
-#include <winternl.h>
 #include <pathcch.h>
 #include <list>
 #include <memory>
@@ -118,29 +117,10 @@ std::unique_ptr<FILE_ID_128> IterateDirectory(const HANDLE directory, const PCWS
 	}
 	return nullptr;
 }
-ATL::CHandle2 OpenAtNoCase(const HANDLE directory, const PCWSTR name)
-{
-	UNICODE_STRING unicode_name;
-	RtlInitUnicodeString(&unicode_name, name);
-	OBJECT_ATTRIBUTES obj_attr;
-	InitializeObjectAttributes(&obj_attr, &unicode_name, OBJ_CASE_INSENSITIVE, directory, nullptr);
-	IO_STATUS_BLOCK iob;
-	HANDLE h;
-	NTSTATUS status = NtOpenFile(&h, FILE_GENERIC_READ, &obj_attr, &iob, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT);
-	if (NT_SUCCESS(status))
-	{
-		return h;
-	}
-	else
-	{
-		SetLastError(RtlNtStatusToDosError(status));
-		return nullptr;
-	}
-}
 _Success_(return != nullptr)
 HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 {
-	if (PathIsUNCW(full_path) || PathIsRelativeW(full_path) || full_path[0] == L'\\')
+	if (PathIsUNCW(full_path) || PathIsRelativeW(full_path) || (full_path[0] == L'\\' && wcsncmp(full_path, LR"(\\?\)", 4) != 0))
 	{
 		SetLastError(ERROR_NOT_SUPPORTED);
 		return nullptr;
@@ -163,7 +143,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 	struct node
 	{
 		node() = default;
-		node(ATL::CStringW name) : name(name) {}
+		node(const ATL::CStringW& name) : name(name) {}
 		~node() = default;
 		ATL::CStringW name;
 		ATL::CHandle2 handle;
@@ -188,24 +168,20 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 	int visited = 0;
 	for (auto it = components.begin(), end = components.end(); it != end; ++it)
 	{
-		if (std::unique_ptr<FILE_ID_128> child = IterateDirectory(parent, (*it).name))
+		if (std::unique_ptr<FILE_ID_128> child = IterateDirectory(parent, it->name))
 		{
 			FILE_ID_DESCRIPTOR Id = { sizeof Id };
 			Id.Type = ExtendedFileIdType;
 			Id.ExtendedFileId = *child;
-			(*it).handle = OpenFileById(volume, &Id, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+			it->handle = OpenFileById(volume, &Id, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
 		}
-		else
-		{
-			(*it).handle = OpenAtNoCase(parent, (*it).name);
-		}
-		if (!(*it).handle)
+		if (!it->handle)
 		{
 			_CrtDbgBreak();
 			return nullptr;
 		}
 		FILE_ATTRIBUTE_TAG_INFO attr_tag;
-		if (GetFileInformationByHandleEx((*it).handle, FileAttributeTagInfo, &attr_tag, sizeof attr_tag) && attr_tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+		if (GetFileInformationByHandleEx(it->handle, FileAttributeTagInfo, &attr_tag, sizeof attr_tag) && attr_tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
 		{
 			if (++visited >= 64)
 			{
@@ -216,7 +192,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			ATL::CHeapPtr<REPARSE_DATA_BUFFER> reparse_point;
 			ATLENSURE(reparse_point.AllocateBytes(MAXIMUM_REPARSE_DATA_BUFFER_SIZE));
 			ULONG junk;
-			ATLENSURE(DeviceIoControl((*it).handle, FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_point, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr));
+			ATLENSURE(DeviceIoControl(it->handle, FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_point, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr));
 			if (reparse_point->ReparseTag == IO_REPARSE_TAG_SYMLINK)
 			{
 				ATL::CStringW sym_path(&reparse_point->SymbolicLinkReparseBuffer.PathBuffer[reparse_point->SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR)], reparse_point->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(WCHAR));
@@ -240,18 +216,18 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 				if (reparse_point->SymbolicLinkReparseBuffer.Flags == 0)
 				{
 					_ASSERTE(wcsncmp(sym_path, LR"(\??\)", 4) == 0);
-					(*++it).name.AppendChar(L'\\');
-					volume = CreateFileW((*it).name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+					it->name.AppendChar(L'\\');
+					volume = CreateFileW(it->name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 					parent = volume;
 				}
 				else if (reparse_point->SymbolicLinkReparseBuffer.Flags == SYMLINK_FLAG_RELATIVE)
 				{
 					it = components.begin();
-					while (it != end && (*it).handle)
+					while (it != end && it->handle)
 					{
 						++it;
 					}
-					parent = (*--it).handle;
+					parent = (--it)->handle;
 				}
 				else
 				{
@@ -275,8 +251,8 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 					{
 						mount_it = components.emplace(mount_it, path);
 					}
-					(*++it).name.AppendChar(L'\\');
-					volume = CreateFileW((*it).name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+					(++it)->name.AppendChar(L'\\');
+					volume = CreateFileW(it->name, FILE_LIST_DIRECTORY | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 					parent = volume;
 				}
 				else
@@ -289,7 +265,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			{
 				if (std::next(it) == components.end())
 				{
-					return (*it).handle.Detach();
+					return it->handle.Detach();
 				}
 				else
 				{
@@ -300,8 +276,8 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 		}
 		else
 		{
-			parent = (*it).handle;
+			parent = it->handle;
 		}
 	}
-	return (*std::prev(components.end())).handle.Detach();
+	return std::prev(components.end())->handle.Detach();
 }
