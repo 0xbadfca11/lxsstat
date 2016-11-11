@@ -1,7 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #define STRICT
 #define _ATL_NO_AUTOMATIC_NAMESPACE
-#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <pathcch.h>
 #include <atlalloc.h>
@@ -142,7 +141,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					str,
 					sizeof str,
 					"%Y-%m-%d %T",
-					gmtime(&mactime[j].tv_sec)
+					__pragma(warning(suppress:4996)) gmtime(&mactime[j].tv_sec)
 				);
 				printf("%s: %s.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
 			}

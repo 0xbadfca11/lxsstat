@@ -49,8 +49,8 @@ struct FILE_GET_EA_INFORMATION
 	UCHAR EaNameLength;
 	CHAR  EaName[ANYSIZE_ARRAY];
 };
-constexpr size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
-constexpr size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
+const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
+const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 #pragma endregion
 EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
 	_In_ POSVERSIONINFOW	VersionInfo,
@@ -209,13 +209,13 @@ namespace Lxss
 
 		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
 		{
-			buf->st_dev = 14;
+			// issue #3
+			buf->st_dev = 0;
 			buf->FileId = file_id_info.FileId;
 			buf->st_nlink = file_std_info.NumberOfLinks;
 			buf->st_atim = FileTimeToUnixTime(file_basic_info.LastAccessTime.QuadPart);
 			buf->st_mtim = FileTimeToUnixTime(file_basic_info.LastWriteTime.QuadPart);
 			buf->st_ctim = FileTimeToUnixTime(file_basic_info.ChangeTime.QuadPart);
-			buf->st_birthtim = {};
 			buf->st_size = file_std_info.EndOfFile.QuadPart;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
@@ -228,11 +228,11 @@ namespace Lxss
 		}
 		else
 		{
-			constexpr size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
+			const size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
 			ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
 			Ea.AllocateBytes(EaLength);
 
-			constexpr size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
+			const size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
 			ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
 			EaQuery.AllocateBytes(EaQueryLength);
 			EaQuery->NextEntryOffset = 0;
@@ -246,7 +246,7 @@ namespace Lxss
 				SetLastError(ea_status);
 				return -1;
 			}
-			// If EaList != null ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
+			// When EaList != null, ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
 			if (Ea->EaValueLength != sizeof(LXATTRB))
 			{
 				SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
@@ -255,7 +255,6 @@ namespace Lxss
 			_ASSERTE(strcmp(Ea->EaName, LxssEaName) == 0);
 			const LXATTRB* const lxattr = (LXATTRB*)&Ea->EaName[Ea->EaNameLength + 1];
 			_ASSERTE(lxattr->unknown1 == 0x10000);
-			_ASSERTE(HIWORD(lxattr->st_mode) == 0);
 
 			// issue #3
 			buf->st_dev = 0;
@@ -267,8 +266,6 @@ namespace Lxss
 			buf->st_mtim.tv_nsec = lxattr->mtime_extra;
 			buf->st_ctim.tv_sec = lxattr->ctime;
 			buf->st_ctim.tv_nsec = lxattr->ctime_extra;
-			buf->st_birthtim.tv_sec = 0;
-			buf->st_birthtim.tv_nsec = 0;
 			buf->st_size = (S_ISREG(lxattr->st_mode) || S_ISLNK(lxattr->st_mode)) ? file_std_info.EndOfFile.QuadPart : 0;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
@@ -339,7 +336,7 @@ namespace Lxss
 			ids.emplace(std::piecewise_construct, std::make_tuple(std::stoi(head + id_pos)), std::make_tuple(head, name_length));
 		}
 	}
-	PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
+	_Ret_z_ PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
 	{
 		_ASSERTE(ids.size() > 0);
 		auto it = ids.find(id);
@@ -352,11 +349,11 @@ namespace Lxss
 			return "--------";
 		}
 	}
-	PCSTR UserNameFromUID(uint32_t uid)
+	_Ret_z_ PCSTR UserNameFromUID(uint32_t uid)
 	{
 		return NameFromIDs(uids, uid);
 	}
-	PCSTR GroupNameFromGID(uint32_t gid)
+	_Ret_z_ PCSTR GroupNameFromGID(uint32_t gid)
 	{
 		return NameFromIDs(gids, gid);
 	}

@@ -12,13 +12,13 @@
 #include <sys/stat.h>
 
 #ifndef STATUS_NO_EAS_ON_FILE
-constexpr NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
+const NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
 #else
 static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L, "");
 #endif
 
 #ifndef IO_REPARSE_TAG_LX_SYMLINK
-constexpr ULONG IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D;
+const ULONG IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D;
 static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_SYMLINK), "");
 #else
 static_assert(IO_REPARSE_TAG_LX_SYMLINK == 0xA000001D, "");
@@ -26,23 +26,23 @@ static_assert(IO_REPARSE_TAG_LX_SYMLINK == 0xA000001D, "");
 
 namespace Lxss
 {
-	constexpr uint32_t S_IFLNK = 0120000;
-	constexpr uint32_t S_IFIFO = 010000;
-	constexpr uint32_t S_ISUID = 04000;
-	constexpr uint32_t S_ISGID = 02000;
-	constexpr uint32_t S_ISVTX = 01000;
-	constexpr uint32_t S_IRWXU = 0700;
-	constexpr uint32_t S_IRUSR = 0400;
-	constexpr uint32_t S_IWUSR = 0200;
-	constexpr uint32_t S_IXUSR = 0100;
-	constexpr uint32_t S_IRWXG = 070;
-	constexpr uint32_t S_IRGRP = 040;
-	constexpr uint32_t S_IWGRP = 020;
-	constexpr uint32_t S_IXGRP = 010;
-	constexpr uint32_t S_IRWXO = 07;
-	constexpr uint32_t S_IROTH = 04;
-	constexpr uint32_t S_IWOTH = 02;
-	constexpr uint32_t S_IXOTH = 01;
+	const uint32_t S_IFLNK = 0120000;
+	const uint32_t S_IFIFO = 010000;
+	const uint32_t S_ISUID = 04000;
+	const uint32_t S_ISGID = 02000;
+	const uint32_t S_ISVTX = 01000;
+	const uint32_t S_IRWXU = 0700;
+	const uint32_t S_IRUSR = 0400;
+	const uint32_t S_IWUSR = 0200;
+	const uint32_t S_IXUSR = 0100;
+	const uint32_t S_IRWXG = 070;
+	const uint32_t S_IRGRP = 040;
+	const uint32_t S_IWGRP = 020;
+	const uint32_t S_IXGRP = 010;
+	const uint32_t S_IRWXO = 07;
+	const uint32_t S_IROTH = 04;
+	const uint32_t S_IWOTH = 02;
+	const uint32_t S_IXOTH = 01;
 	static bool inline S_ISLNK(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFLNK;
@@ -75,7 +75,6 @@ namespace Lxss
 		struct _timespec64 st_atim;
 		struct _timespec64 st_mtim;
 		struct _timespec64 st_ctim;
-		struct _timespec64 st_birthtim;
 		uint64_t st_size;
 		uint32_t st_blksize;
 		uint64_t st_blocks;
@@ -88,9 +87,9 @@ namespace Lxss
 	std::wstring realpath(std::wstring path);
 	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept;
 	std::unordered_map<uint32_t, const std::string> ParsePasswdLikeFile(const std::wstring& file);
-	PCSTR UserNameFromUID(uint32_t uid);
-	PCSTR GroupNameFromGID(uint32_t gid);
-#include <pshpack1.h>
+	_Ret_z_ PCSTR UserNameFromUID(uint32_t uid);
+	_Ret_z_ PCSTR GroupNameFromGID(uint32_t gid);
+
 	struct LXATTRB
 	{
 		uint32_t unknown1;
@@ -105,9 +104,6 @@ namespace Lxss
 		uint64_t mtime;
 		uint64_t ctime;
 	};
-#include <poppack.h>
 	static_assert(sizeof(LXATTRB) == 56, "");
-
-	constexpr char LxssEaName[] = "LXATTRB";
-
+	const char LxssEaName[] = "LXATTRB";
 }

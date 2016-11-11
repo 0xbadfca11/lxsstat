@@ -41,10 +41,7 @@ namespace ATL
 	struct CHandle2 : CHandle
 	{
 		CHandle2() = default;
-		CHandle2(const CHandle2& h)
-		{
-			ATLENSURE(DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &m_h, 0, FALSE, DUPLICATE_SAME_ACCESS));
-		}
+		CHandle2(const CHandle2&) = delete;
 		CHandle2(CHandle2&& h) noexcept
 		{
 			Attach(h.Detach());
@@ -53,12 +50,7 @@ namespace ATL
 		{
 			Attach(h);
 		}
-		CHandle2& operator=(const CHandle2& h)
-		{
-			Close();
-			ATLENSURE(DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &m_h, 0, FALSE, DUPLICATE_SAME_ACCESS));
-			return *this;
-		}
+		CHandle2& operator=(const CHandle2&) = delete;
 		CHandle2& operator=(CHandle2&& h) noexcept
 		{
 			Attach(h.Detach());
@@ -164,7 +156,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			components.emplace_back(path);
 		}
 	}
-	ATL::CHandle2 parent = volume;
+	HANDLE parent = volume;
 	int visited = 0;
 	for (auto it = components.begin(), end = components.end(); it != end; ++it)
 	{
