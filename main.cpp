@@ -15,7 +15,7 @@ ATL::CHeapPtr<WCHAR> GetWindowsError(ULONG error_code = GetLastError())
 {
 	ATL::CHeapPtr<WCHAR> msg;
 	ATLENSURE(msg.Allocate(USHRT_MAX));
-	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, error_code, 0, msg, USHRT_MAX, nullptr));
+	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error_code, 0, msg, USHRT_MAX, nullptr));
 	return msg;
 }
 int __cdecl wmain(int argc, wchar_t* argv[])
