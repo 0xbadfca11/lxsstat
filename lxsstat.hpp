@@ -86,7 +86,8 @@ namespace Lxss
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
 	std::wstring realpath(std::wstring path);
 	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept;
-	std::unordered_map<uint32_t, const std::string> ParsePasswdLikeFile(const std::wstring& file);
+	std::unordered_map<std::string, std::vector<std::string>> ParsePasswd(const std::wstring& file);
+	std::unordered_map<uint32_t, const std::string> ParseGroup(const std::wstring& file);
 	_Ret_z_ PCSTR UserNameFromUID(uint32_t uid);
 	_Ret_z_ PCSTR GroupNameFromGID(uint32_t gid);
 

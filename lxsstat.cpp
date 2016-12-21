@@ -12,9 +12,12 @@
 #include <atlchecked.h>
 #include <atlcore.h>
 #include <array>
+#include <codecvt>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <cstdint>
 #include <fcntl.h>
 #include <io.h>
@@ -66,10 +69,68 @@ namespace Lxss
 		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)));
 		return temp;
 	}();
+	const std::unordered_map<std::string, std::vector<std::string>> Passwd = ParsePasswd(realpath(L"/etc/passwd"));
 	std::wstring realpath(std::wstring path)
 	{
 		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
 		const WCHAR prefix[] = LR"(\\?\)";
+		if (path[0] == L'~')
+		{
+			std::string user = "root";
+			size_t pos;
+			if (path[1] == L'/' || path[1] == L'\0')
+			{
+				pos = 1;
+				ULONG cb = 0;
+				LSTATUS result = RegGetValueA(
+					HKEY_CURRENT_USER,
+					R"(SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss)",
+					"DefaultUsername",
+					RRF_RT_REG_SZ,
+					nullptr,
+					nullptr,
+					&cb
+				);
+				if (result == ERROR_SUCCESS)
+				{
+					auto value = std::make_unique<CHAR[]>(cb);
+					result = RegGetValueA(
+						HKEY_CURRENT_USER,
+						R"(SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss)",
+						"DefaultUsername",
+						RRF_RT_REG_SZ,
+						nullptr,
+						value.get(),
+						&cb
+					); if (result == ERROR_SUCCESS)
+					{
+						user = value.get();
+					}
+					else
+					{
+						fprintf(stderr, "Can't get DefaultUsername:%08lx\n", result);
+					}
+				}
+				else if (result != ERROR_FILE_NOT_FOUND)
+				{
+					fprintf(stderr, "Can't get DefaultUsername:%08lx\n", result);
+				}
+			}
+			else
+			{
+				pos = path.find(L'/', 1);
+				user = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().to_bytes(path.substr(1, pos - 1).c_str());
+			}
+			auto it = Passwd.find(user);
+			if (it == Passwd.end())
+			{
+				fprintf(stderr, "Can't found user \"%s\"\n", user.c_str());
+			}
+			else
+			{
+				path = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(it->second[5].c_str()) + path.substr(pos);
+			}
+		}
 		if (path[0] == L'/')
 		{
 			const WCHAR fixups[] = LR"(#<>:"\|?*)"
@@ -277,47 +338,51 @@ namespace Lxss
 			return 0;
 		}
 	}
-	const std::unordered_map<uint32_t, const std::string> uids = ParsePasswdLikeFile(realpath(L"/etc/passwd"));
-	const std::unordered_map<uint32_t, const std::string> gids = ParsePasswdLikeFile(realpath(L"/etc/group"));
-	std::unordered_map<uint32_t, const std::string> ParsePasswdLikeFile(const std::wstring& file)
+	const std::unordered_map<uint32_t, const std::string> uids = ParseGroup(realpath(L"/etc/passwd"));
+	const std::unordered_map<uint32_t, const std::string> gids = ParseGroup(realpath(L"/etc/group"));
+	struct fileclose
+	{
+		void operator()(FILE* f) noexcept
+		{
+			fclose(f);
+		}
+	};
+	std::unique_ptr<FILE, fileclose> fopenInLxss(const std::wstring& file)
 	{
 		HANDLE h = OpenFileCaseSensitive(file.c_str());
 		if (!h)
 		{
-			return{};
+			return nullptr;
 		}
 		int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);
 		if (fd == -1)
 		{
 			CloseHandle(h);
-			return{};
+			return nullptr;
 		}
-		struct fileclose
-		{
-			void operator()(FILE* f) noexcept
-			{
-				fclose(f);
-			}
-		};
 		std::unique_ptr<FILE, fileclose> f(_fdopen(fd, "r"));
 		if (!f)
 		{
 			_close(fd);
-			return{};
+			return nullptr;
 		}
-		std::unordered_map<uint32_t, const std::string> ids;
+		return f;
+	}
+	std::vector<std::string> ReadLines(_In_ FILE* f)
+	{
+		std::vector<std::string> lines;
 		for (;;)
 		{
 			std::string line;
 			for (;;)
 			{
 				char buf[0x80];
-				if (!fgets(buf, _countof(buf), f.get()))
+				if (!fgets(buf, _countof(buf), f))
 				{
-					return ids;
+					return lines;
 				}
 				line += buf;
-				if (feof(f.get()))
+				if (feof(f))
 				{
 					break;
 				}
@@ -330,11 +395,58 @@ namespace Lxss
 					break;
 				}
 			}
+			auto pos = line.find_last_not_of('\n');
+			if (pos != std::string::npos)
+			{
+				line = line.substr(0, pos + 1);
+			}
+			lines.emplace_back(std::move(line));
+		}
+	}
+	std::unordered_map<std::string, std::vector<std::string>> ParsePasswd(const std::wstring& file)
+	{
+		auto f = fopenInLxss(file);
+		if (!f)
+		{
+			return {};
+		}
+		const auto lines = ReadLines(f.get());
+		std::unordered_map<std::string, std::vector<std::string>> passwd;
+		for (auto line : lines)
+		{
+			std::stringstream ss(line);
+			std::string part;
+			std::vector<std::string> elements;
+			while (std::getline(ss, part, ':'))
+			{
+				elements.emplace_back(std::move(part));
+			}
+			elements.shrink_to_fit();
+			std::string name = elements[0];
+			passwd.emplace(
+				std::piecewise_construct,
+				std::make_tuple(std::move(name)),
+				std::make_tuple(std::move(elements)));
+		}
+		return passwd;
+	}
+	std::unordered_map<uint32_t, const std::string> ParseGroup(const std::wstring& file)
+	{
+		auto f = fopenInLxss(file);
+		if (!f)
+		{
+			return {};
+		}
+		const auto lines = ReadLines(f.get());
+		std::unordered_map<uint32_t, const std::string> ids;
+		for (const auto& line : lines)
+		{
 			auto const head = line.data();
 			size_t name_length = line.find(":");
 			size_t id_pos = line.find(":", name_length + 1) + 1;
 			ids.emplace(std::piecewise_construct, std::make_tuple(std::stoi(head + id_pos)), std::make_tuple(head, name_length));
 		}
+		return ids;
 	}
 	_Ret_z_ PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
 	{
