@@ -102,7 +102,8 @@ namespace Lxss
 						nullptr,
 						value.get(),
 						&cb
-					); if (result == ERROR_SUCCESS)
+					);
+					if (result == ERROR_SUCCESS)
 					{
 						user = value.get();
 					}
@@ -119,7 +120,17 @@ namespace Lxss
 			else
 			{
 				pos = path.find(L'/', 1);
-				user = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().to_bytes(path.substr(1, pos - 1).c_str());
+				const std::wstring name = path.substr(1, pos - 1);
+				if (int buf_size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name.c_str(), -1, nullptr, 0, nullptr, nullptr))
+				{
+					auto buf = std::make_unique<CHAR[]>(buf_size);
+					WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name.c_str(), -1, buf.get(), buf_size, nullptr, nullptr);
+					user = buf.get();
+				}
+				else
+				{
+					ATL::AtlThrowLastWin32();
+				}
 			}
 			auto it = Passwd.find(user);
 			if (it == Passwd.end())
@@ -128,7 +139,16 @@ namespace Lxss
 			}
 			else
 			{
-				path = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(it->second[5].c_str()) + path.substr(pos);
+				if (int buf_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, it->second[5].c_str(), -1, nullptr, 0))
+				{
+					auto buf = std::make_unique<WCHAR[]>(buf_size);
+					MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, it->second[5].c_str(), -1, buf.get(), buf_size);
+					path = buf.get() + path.substr(pos);
+				}
+				else
+				{
+					ATL::AtlThrowLastWin32();
+				}
 			}
 		}
 		if (path[0] == L'/')
@@ -408,7 +428,7 @@ namespace Lxss
 		auto f = fopenInLxss(file);
 		if (!f)
 		{
-			return {};
+			return{};
 		}
 		const auto lines = ReadLines(f.get());
 		std::unordered_map<std::string, std::vector<std::string>> passwd;
@@ -435,7 +455,7 @@ namespace Lxss
 		auto f = fopenInLxss(file);
 		if (!f)
 		{
-			return {};
+			return{};
 		}
 		const auto lines = ReadLines(f.get());
 		std::unordered_map<uint32_t, const std::string> ids;
