@@ -120,7 +120,7 @@ namespace Lxss
 			else
 			{
 				pos = path.find(L'/', 1);
-				const std::wstring name = path.substr(1, pos - 1);
+				const std::wstring name = pos != -1 ? path.substr(1, pos - 1) : path.substr(1);
 				if (int buf_size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name.c_str(), -1, nullptr, 0, nullptr, nullptr))
 				{
 					auto buf = std::make_unique<CHAR[]>(buf_size);
@@ -143,7 +143,7 @@ namespace Lxss
 				{
 					auto buf = std::make_unique<WCHAR[]>(buf_size);
 					MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, it->second[5].c_str(), -1, buf.get(), buf_size);
-					path = buf.get() + path.substr(pos);
+					path = pos != -1 ? buf.get() + path.substr(pos) : buf.get();
 				}
 				else
 				{
