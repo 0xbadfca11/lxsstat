@@ -140,7 +140,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				strftime(
 					str,
 					sizeof str,
-					"%Y-%m-%d %T",
+					"%F %T",
 					__pragma(warning(suppress:4996)) gmtime(&mactime[j].tv_sec)
 				);
 				printf("%s: %s.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
