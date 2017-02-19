@@ -12,7 +12,6 @@
 #include <atlchecked.h>
 #include <atlcore.h>
 #include <array>
-#include <codecvt>
 #include <memory>
 #include <sstream>
 #include <string>
