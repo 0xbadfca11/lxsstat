@@ -93,11 +93,11 @@ namespace Lxss
 
 	struct LXATTRB
 	{
-		uint32_t unknown1;
+		uint32_t unknown1;// version ?
 		uint32_t st_mode;
 		uint32_t st_uid;
 		uint32_t st_gid;
-		uint32_t st_rdev;
+		uint32_t unknown2;// st_rdev ?
 		uint32_t atime_extra;
 		uint32_t mtime_extra;
 		uint32_t ctime_extra;

@@ -351,8 +351,10 @@ namespace Lxss
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 			buf->st_uid = lxattr->st_uid;
 			buf->st_gid = lxattr->st_gid;
-			buf->st_rdev = !lxattr->st_rdev ? 0 : ((lxattr->st_rdev >> 12) & 0xff00) | (lxattr->st_rdev & 0xff);
-			buf->st_mode = lxattr->st_mode | (!lxattr->st_rdev ? 0 : S_IFCHR);
+			// issue #4
+			_RPT1(_CRT_WARN, "st_rdev?(%08lx)\n", lxattr->unknown2);
+			buf->st_rdev = 0;
+			buf->st_mode = lxattr->st_mode;
 
 			return 0;
 		}
