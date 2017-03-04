@@ -251,6 +251,10 @@ namespace Lxss
 	{
 		return IsBuildNumberGreaterThanOrEqualTo(14946) ? 0 : 2;
 	}
+	constexpr uint64_t inline MAKEUINT64(uint32_t low, uint32_t high) noexcept
+	{
+		return low | high * 1ULL << 32;
+	}
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
 		auto windows_path = realpath(path);
@@ -261,6 +265,11 @@ namespace Lxss
 			return -1;
 		}
 
+		BY_HANDLE_FILE_INFORMATION file_info;
+		if (!GetFileInformationByHandle(h, &file_info))
+		{
+			return -1;
+		}
 		FILE_BASIC_INFO file_basic_info;
 		if (!GetFileInformationByHandleEx(h, FileBasicInfo, &file_basic_info, sizeof file_basic_info))
 		{
@@ -281,17 +290,12 @@ namespace Lxss
 		{
 			return -1;
 		}
-		FILE_ID_INFO file_id_info;
-		if (!GetFileInformationByHandleEx(h, FileIdInfo, &file_id_info, sizeof file_id_info))
-		{
-			return -1;
-		}
 
 		if ((file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
 		{
 			// issue #3
 			buf->st_dev = 0;
-			buf->FileId = file_id_info.FileId;
+			buf->st_ino = MAKEUINT64(file_info.nFileIndexLow, file_info.nFileIndexHigh);
 			buf->st_nlink = file_std_info.NumberOfLinks;
 			buf->st_atim = FileTimeToUnixTime(file_basic_info.LastAccessTime.QuadPart);
 			buf->st_mtim = FileTimeToUnixTime(file_basic_info.LastWriteTime.QuadPart);
@@ -338,7 +342,7 @@ namespace Lxss
 
 			// issue #3
 			buf->st_dev = 0;
-			buf->FileId = file_id_info.FileId;
+			buf->st_ino = MAKEUINT64(file_info.nFileIndexLow, file_info.nFileIndexHigh);
 			buf->st_nlink = !S_ISDIR(lxattr->st_mode) ? file_std_info.NumberOfLinks : DirectoryConstantLinkCount();
 			buf->st_atim.tv_sec = lxattr->atime;
 			buf->st_atim.tv_nsec = lxattr->atime_extra;

@@ -66,11 +66,7 @@ namespace Lxss
 	struct stat
 	{
 		uint32_t st_dev;
-		union
-		{
-			uint64_t st_ino;
-			FILE_ID_128 FileId;
-		};
+		uint64_t st_ino;
 		uint32_t st_nlink;
 		struct _timespec64 st_atim;
 		struct _timespec64 st_mtim;
