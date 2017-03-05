@@ -10,6 +10,7 @@
 #include <atlalloc.h>
 #include <atlbase.h>
 #include <atlchecked.h>
+#include <atlconv.h>
 #include <atlcore.h>
 #include <array>
 #include <memory>
@@ -120,16 +121,7 @@ namespace Lxss
 			{
 				pos = path.find(L'/', 1);
 				const std::wstring name = pos != -1 ? path.substr(1, pos - 1) : path.substr(1);
-				if (int buf_size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name.c_str(), -1, nullptr, 0, nullptr, nullptr))
-				{
-					auto buf = std::make_unique<CHAR[]>(buf_size);
-					WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name.c_str(), -1, buf.get(), buf_size, nullptr, nullptr);
-					user = buf.get();
-				}
-				else
-				{
-					ATL::AtlThrowLastWin32();
-				}
+				user = (PCSTR)ATL::CW2A(name.c_str(), CP_UTF8);
 			}
 			auto it = Passwd.find(user);
 			if (it == Passwd.end())
@@ -138,16 +130,7 @@ namespace Lxss
 			}
 			else
 			{
-				if (int buf_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, it->second[5].c_str(), -1, nullptr, 0))
-				{
-					auto buf = std::make_unique<WCHAR[]>(buf_size);
-					MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, it->second[5].c_str(), -1, buf.get(), buf_size);
-					path = pos != -1 ? buf.get() + path.substr(pos) : buf.get();
-				}
-				else
-				{
-					ATL::AtlThrowLastWin32();
-				}
+				path = pos != -1 ? (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8) + path.substr(pos) : (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8);
 			}
 		}
 		if (path[0] == L'/')
