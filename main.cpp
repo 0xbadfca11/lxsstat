@@ -23,6 +23,13 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
 	_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG | _CRTDBG_MODE_FILE);
+	// Console is bash. (or chcp 65001.)
+	// can not display localized system error messages in UTF-8.
+	if (GetConsoleCP() == CP_UTF8)
+	{
+		atexit([]{ SetConsoleOutputCP(GetConsoleCP()); });
+		SetConsoleOutputCP(GetOEMCP());
+	}
 	setlocale(LC_ALL, "");
 	if (argc <= 1)
 	{
