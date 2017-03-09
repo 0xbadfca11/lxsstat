@@ -109,12 +109,12 @@ namespace Lxss
 					}
 					else
 					{
-						fprintf(stderr, "Can't get DefaultUsername:%08lx\n", result);
+						fwprintf(stderr, L"Can't get DefaultUsername:%08lx\n", result);
 					}
 				}
 				else if (result != ERROR_FILE_NOT_FOUND)
 				{
-					fprintf(stderr, "Can't get DefaultUsername:%08lx\n", result);
+					fwprintf(stderr, L"Can't get DefaultUsername:%08lx\n", result);
 				}
 			}
 			else
@@ -126,7 +126,7 @@ namespace Lxss
 			auto it = Passwd.find(user);
 			if (it == Passwd.end())
 			{
-				fprintf(stderr, "Can't found user \"%s\"\n", user.c_str());
+				fwprintf(stderr, L"Can't found user \"%hs\"\n", user.c_str());
 			}
 			else
 			{

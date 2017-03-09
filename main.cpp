@@ -5,6 +5,8 @@
 #include <pathcch.h>
 #include <atlalloc.h>
 #include <atlbase.h>
+#include <fcntl.h>
+#include <io.h>
 #include <cstdio>
 #include <cstdlib>
 #include <crtdbg.h>
@@ -23,17 +25,11 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
 	_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG | _CRTDBG_MODE_FILE);
-	// Console is bash. (or chcp 65001.)
-	// can not display localized system error messages in UTF-8.
-	if (GetConsoleCP() == CP_UTF8)
-	{
-		atexit([]{ SetConsoleOutputCP(GetConsoleCP()); });
-		SetConsoleOutputCP(GetOEMCP());
-	}
-	setlocale(LC_ALL, "");
+	_setmode(_fileno(stdout), _O_U8TEXT);
+	_setmode(_fileno(stderr), _O_U8TEXT);
 	if (argc <= 1)
 	{
-		fputs("lxsstat {POSIX_PATH|Windows_PATH} [...]\n", stderr);
+		fputws(L"lxsstat {POSIX_PATH|Windows_PATH} [...]\n", stderr);
 		return EXIT_FAILURE;
 	}
 
@@ -46,16 +42,16 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			ULONG error = GetLastError();
 			if (error == STATUS_NO_EAS_ON_FILE)
 			{
-				fprintf(stderr, "%ls\nThis file is not under the control of the Ubuntu on Windows\n", windows_path.c_str());
+				fwprintf(stderr, L"%ls\nThis file is not under the control of the Ubuntu on Windows\n", windows_path.c_str());
 			}
 			else
 			{
-				fprintf(stderr, "%ls\n%ls", windows_path.c_str(), (PCWSTR)GetWindowsError(error));
+				fwprintf(stderr, L"%ls\n%ls", windows_path.c_str(), (PCWSTR)GetWindowsError(error));
 			}
 		}
 		else
 		{
-			printf("  File: '%ls'", argv[i]);
+			wprintf(L"  File: '%ls'", argv[i]);
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
 				static_assert(PATHCCH_MAX_CCH <= ULONG_MAX, "");
@@ -66,63 +62,63 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
 					if (h && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
-						printf("  ->  '%.*s'\n", read_size, (PBYTE)buffer);
+						wprintf(L"  ->  '%.*hs'\n", read_size, (PBYTE)buffer);
 					}
 					else
 					{
-						printf("  ->  ?\?\?\?\?\?\?\?\n%ls", (PCWSTR)GetWindowsError());
+						wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", (PCWSTR)GetWindowsError());
 					}
 				}
 				else
 				{
-					puts("  ->  symlink too long");
+					_putws(L"  ->  symlink too long");
 				}
 			}
 			else
 			{
-				puts("");
+				_putws(L"");
 			}
-			printf(
-				"  Size: %-15llu Blocks: %-10llu IO Block: %-6u ",
+			wprintf(
+				L"  Size: %-15llu Blocks: %-10llu IO Block: %-6u ",
 				buf.st_size,
 				buf.st_blocks,
 				buf.st_blksize
 			);
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
-				puts("symbolic link");
+				_putws(L"symbolic link");
 			}
 			else if (Lxss::S_ISDIR(buf.st_mode))
 			{
-				puts("directory");
+				_putws(L"directory");
 			}
 			else if (Lxss::S_ISREG(buf.st_mode))
 			{
 				if (buf.st_size)
 				{
-					puts("regular file");
+					_putws(L"regular file");
 				}
 				else
 				{
-					puts("regular empty file");
+					_putws(L"regular empty file");
 				}
 			}
 			else if (Lxss::S_ISCHR(buf.st_mode))
 			{
-				puts("character special file");
+				_putws(L"character special file");
 			}
 			else if (Lxss::S_ISFIFO(buf.st_mode))
 			{
-				puts("fifo");
+				_putws(L"fifo");
 			}
 			else
 			{
-				puts("unknown");
+				_putws(L"unknown");
 			}
-			printf(
+			wprintf(
 				!Lxss::S_ISCHR(buf.st_mode)
-				? "Device: %xh/%ud   Inode: %llu  Links: %u\n"
-				: "Device: %xh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
+				? L"Device: %xh/%ud   Inode: %llu  Links: %u\n"
+				: L"Device: %xh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
 				buf.st_dev,
 				buf.st_dev,
 				buf.st_ino,
@@ -130,8 +126,8 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				HIBYTE(buf.st_rdev),
 				LOBYTE(buf.st_rdev)
 			);
-			printf(
-				"Access: (%04o/%s)  Uid: (% 5u/% 8s)   Gid: (% 5u/% 8s)\n",
+			wprintf(
+				L"Access: (%04o/%hs)  Uid: (% 5u/% 8hs)   Gid: (% 5u/% 8hs)\n",
 				buf.st_mode & 07777,
 				Lxss::mode_tostring(buf.st_mode).data(),
 				buf.st_uid,
@@ -150,7 +146,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					"%F %T",
 					__pragma(warning(suppress:4996)) gmtime(&mactime[j].tv_sec)
 				);
-				printf("%s: %s.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
+				wprintf(L"%hs: %hs.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
 			}
 		}
 	}
