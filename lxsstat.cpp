@@ -56,9 +56,9 @@ const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL
 const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 #pragma endregion
 EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
-	_In_ POSVERSIONINFOW	VersionInfo,
-	_In_ ULONG	TypeMask,
-	_In_ ULONGLONG	ConditionMask
+	_In_ POSVERSIONINFOW VersionInfo,
+	_In_ ULONG           TypeMask,
+	_In_ ULONGLONG       ConditionMask
 );
 
 namespace Lxss
