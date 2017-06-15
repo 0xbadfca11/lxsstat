@@ -125,15 +125,11 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				_putws(L"unknown");
 			}
 			wprintf(
-				!Lxss::S_ISCHR(buf.st_mode)
-				? L"Device: %xh/%ud   Inode: %llu  Links: %u\n"
-				: L"Device: %xh/%ud   Inode: %llu  Links: %-5u Device type: %x,%x\n",
+				L"Device: %xh/%ud   Inode: %llu  Links: %u\n",
 				buf.st_dev,
 				buf.st_dev,
 				buf.st_ino,
-				buf.st_nlink,
-				HIBYTE(buf.st_rdev),
-				LOBYTE(buf.st_rdev)
+				buf.st_nlink
 			);
 			wprintf(
 				L"Access: (%04o/%hs)  Uid: (% 5u/% 8hs)   Gid: (% 5u/% 8hs)\n",
