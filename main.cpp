@@ -55,7 +55,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			wprintf(L"  File: '%ls'", argv[i]);
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
-				if (buf.st_size <= PATHCCH_MAX_CCH)
+				if (buf.st_size < PATHCCH_MAX_CCH)
 				{
 					ATL::CTempBuffer<CHAR> buffer(buf.st_size + 1);
 					ULONG read_size;
