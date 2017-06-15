@@ -65,9 +65,9 @@ namespace Lxss
 {
 	const auto lxss_root = []()->std::wstring
 	{
-		WCHAR temp[MAX_PATH];
-		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", temp, ARRAYSIZE(temp)));
-		return temp;
+		WCHAR lxss_dir[MAX_PATH];
+		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", lxss_dir, ARRAYSIZE(lxss_dir)));
+		return lxss_dir;
 	}();
 	const std::unordered_map<std::string, std::vector<std::string>> Passwd = ParsePasswd(realpath(L"/etc/passwd"));
 	std::wstring realpath(std::wstring path)
