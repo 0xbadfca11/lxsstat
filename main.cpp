@@ -131,14 +131,16 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				buf.st_ino,
 				buf.st_nlink
 			);
+			const PCSTR user = Lxss::UserNameFromUID(buf.st_uid);
+			const PCSTR group = Lxss::GroupNameFromGID(buf.st_gid);
 			wprintf(
 				L"Access: (%04o/%hs)  Uid: (% 5u/% 8hs)   Gid: (% 5u/% 8hs)\n",
 				buf.st_mode & 07777,
 				Lxss::mode_tostring(buf.st_mode).data(),
 				buf.st_uid,
-				Lxss::UserNameFromUID(buf.st_uid),
+				user ? user : "--------",
 				buf.st_gid,
-				Lxss::GroupNameFromGID(buf.st_gid)
+				group ? group : "--------"
 			);
 			const struct _timespec64(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
 			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };

@@ -456,7 +456,7 @@ namespace Lxss
 		}
 		return ids;
 	}
-	_Ret_z_ PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
+	_Ret_maybenull_z_ PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
 	{
 		_ASSERTE(ids.size() > 0);
 		auto it = ids.find(id);
@@ -466,14 +466,14 @@ namespace Lxss
 		}
 		else
 		{
-			return "--------";
+			return nullptr;
 		}
 	}
-	_Ret_z_ PCSTR UserNameFromUID(uint32_t uid)
+	_Ret_maybenull_z_ PCSTR UserNameFromUID(uint32_t uid)
 	{
 		return NameFromIDs(uids, uid);
 	}
-	_Ret_z_ PCSTR GroupNameFromGID(uint32_t gid)
+	_Ret_maybenull_z_ PCSTR GroupNameFromGID(uint32_t gid)
 	{
 		return NameFromIDs(gids, gid);
 	}
