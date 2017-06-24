@@ -43,7 +43,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			ULONG error = GetLastError();
 			if (error == STATUS_NO_EAS_ON_FILE)
 			{
-				fwprintf(stderr, L"%ls\nThis file is not under the control of the Ubuntu on Windows\n", windows_path.c_str());
+				fwprintf(stderr, L"%ls\nThis file is not under the control of the Windows Subsystem for Linux\n", windows_path.c_str());
 			}
 			else
 			{

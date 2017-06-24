@@ -63,9 +63,52 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
 
 namespace Lxss
 {
+	bool is_distribution_legacy = true;
+	ULONG default_uid = 0;
 	const auto lxss_root = []()->std::wstring
 	{
 		WCHAR lxss_dir[MAX_PATH];
+		ATL::CRegKey lxss_reg_key;
+		if (lxss_reg_key.Open(HKEY_CURRENT_USER, TEXT(R"(Software\Microsoft\Windows\CurrentVersion\Lxss)"), KEY_READ) == ERROR_SUCCESS)
+		{
+			ULONG cch_value = 0;
+			if (RegGetValueW(lxss_reg_key, nullptr, L"DefaultDistribution", RRF_RT_REG_SZ, nullptr, nullptr, &cch_value) == ERROR_SUCCESS)
+			{
+				ATL::CTempBuffer<WCHAR> DefaultDistribution;
+				DefaultDistribution.AllocateBytes(cch_value);
+				if (RegGetValueW(lxss_reg_key, nullptr, L"DefaultDistribution", RRF_RT_REG_SZ, nullptr, DefaultDistribution, &cch_value) == ERROR_SUCCESS)
+				{
+					_RPT1(_CRT_WARN, "DefaultDistribution = %ls\n", (PCWSTR)DefaultDistribution);
+					ATL::CRegKey lxss_distribution_key;
+					if (lxss_distribution_key.Open(lxss_reg_key, DefaultDistribution, KEY_READ) == ERROR_SUCCESS)
+					{
+						cch_value = 0;
+						if (RegGetValueW(lxss_distribution_key, nullptr, L"DistributionName", RRF_RT_REG_SZ, nullptr, nullptr, &cch_value) == ERROR_SUCCESS)
+						{
+							ATL::CTempBuffer<WCHAR> DistributionName;
+							DistributionName.AllocateBytes(cch_value);
+							if (RegGetValueW(lxss_distribution_key, nullptr, L"DistributionName", RRF_RT_REG_SZ, nullptr, DistributionName, &cch_value) == ERROR_SUCCESS)
+							{
+								_RPT1(_CRT_WARN, "DistributionName = %ls\n", (PCWSTR)DistributionName);
+								if (wcscmp(DistributionName, L"Legacy") != 0)
+								{
+									is_distribution_legacy = false;
+								}
+							}
+						}
+						cch_value = sizeof default_uid;
+						RegGetValueW(lxss_distribution_key, nullptr, L"DefaultUid", RRF_RT_REG_DWORD | RRF_ZEROONFAILURE, nullptr, &default_uid, &cch_value);
+						cch_value = sizeof lxss_dir;
+						if (RegGetValueW(lxss_distribution_key, nullptr, L"BasePath", RRF_RT_REG_SZ, nullptr, lxss_dir, &cch_value) == ERROR_SUCCESS)
+						{
+							return lxss_dir;
+						}
+					}
+				}
+			}
+			cch_value = sizeof default_uid;
+			RegGetValueW(lxss_reg_key, nullptr, L"DefaultUid", RRF_RT_REG_DWORD | RRF_ZEROONFAILURE, nullptr, &default_uid, &cch_value);
+		}
 		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", lxss_dir, ARRAYSIZE(lxss_dir)));
 		return lxss_dir;
 	}();
@@ -81,40 +124,13 @@ namespace Lxss
 			if (path[1] == L'/' || path[1] == L'\0')
 			{
 				pos = 1;
-				ULONG cb = 0;
-				LSTATUS result = RegGetValueA(
-					HKEY_CURRENT_USER,
-					R"(SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss)",
-					"DefaultUsername",
-					RRF_RT_REG_SZ,
-					nullptr,
-					nullptr,
-					&cb
-				);
-				if (result == ERROR_SUCCESS)
+				if (PCSTR default_user = UserNameFromUID(default_uid))
 				{
-					auto value = std::make_unique<CHAR[]>(cb);
-					result = RegGetValueA(
-						HKEY_CURRENT_USER,
-						R"(SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss)",
-						"DefaultUsername",
-						RRF_RT_REG_SZ,
-						nullptr,
-						value.get(),
-						&cb
-					);
-					if (result == ERROR_SUCCESS)
-					{
-						user = value.get();
-					}
-					else
-					{
-						fwprintf(stderr, L"Can't get DefaultUsername:%08lx\n", result);
-					}
+					user = default_user;
 				}
-				else if (result != ERROR_FILE_NOT_FOUND)
+				else
 				{
-					fwprintf(stderr, L"Can't get DefaultUsername:%08lx\n", result);
+					fwprintf(stderr, L"Can't get default user name\n");
 				}
 			}
 			else
@@ -151,15 +167,18 @@ namespace Lxss
 				L"/root",
 				L"/home",
 			};
-			for (int i = 0; i < _countof(reloc_directory); ++i)
+			if (is_distribution_legacy)
 			{
-				const size_t reloc_length = wcslen(reloc_directory[i]);
-				if (
-					wcsncmp(path.c_str(), reloc_directory[i], reloc_length) == 0
-					&& (path[reloc_length] == L'\0' || path[reloc_length] == L'/'))
+				for (int i = 0; i < _countof(reloc_directory); ++i)
 				{
-					need_reloc = true;
-					break;
+					const size_t reloc_length = wcslen(reloc_directory[i]);
+					if (
+						wcsncmp(path.c_str(), reloc_directory[i], reloc_length) == 0
+						&& (path[reloc_length] == L'\0' || path[reloc_length] == L'/'))
+					{
+						need_reloc = true;
+						break;
+					}
 				}
 			}
 			path.insert(0, !need_reloc ? lxss_root + L"\\rootfs" : lxss_root);
