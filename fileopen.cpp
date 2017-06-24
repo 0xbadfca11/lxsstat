@@ -167,7 +167,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 			FILE_ID_DESCRIPTOR Id = { sizeof Id };
 			Id.Type = ExtendedFileIdType;
 			Id.ExtendedFileId = *child;
-			it->handle = OpenFileById(volume, &Id, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+			it->handle = OpenFileById(volume, &Id, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
 		}
 		if (!it->handle)
 		{
