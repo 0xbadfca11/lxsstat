@@ -333,7 +333,7 @@ namespace Lxss
 			buf->st_mtim.tv_nsec = lxattr->mtime_extra;
 			buf->st_ctim.tv_sec = lxattr->ctime;
 			buf->st_ctim.tv_nsec = lxattr->ctime_extra;
-			buf->st_size = (S_ISREG(lxattr->st_mode) || S_ISLNK(lxattr->st_mode)) ? file_std_info.EndOfFile.QuadPart : 0;
+			buf->st_size = (S_ISREG(lxattr->st_mode) || S_ISLNK(lxattr->st_mode) ? file_std_info.EndOfFile.QuadPart : S_ISDIR(lxattr->st_mode)) ? file_storage_info.PhysicalBytesPerSectorForPerformance : 0;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
 			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
 			buf->st_uid = lxattr->st_uid;
