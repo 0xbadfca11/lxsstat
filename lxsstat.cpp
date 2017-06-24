@@ -80,7 +80,7 @@ namespace Lxss
 				{
 					_RPT1(_CRT_WARN, "DefaultDistribution = %ls\n", (PCWSTR)DefaultDistribution);
 					ATL::CRegKey lxss_distribution_key;
-					if (lxss_distribution_key.Open(lxss_reg_key, DefaultDistribution, KEY_READ) == ERROR_SUCCESS)
+					if (lxss_distribution_key.Open(lxss_reg_key, ATL::CW2T(DefaultDistribution), KEY_READ) == ERROR_SUCCESS)
 					{
 						cch_value = 0;
 						if (RegGetValueW(lxss_distribution_key, nullptr, L"DistributionName", RRF_RT_REG_SZ, nullptr, nullptr, &cch_value) == ERROR_SUCCESS)
