@@ -26,7 +26,6 @@
 #pragma comment(lib, "pathcch")
 #pragma comment(lib, "ntdll")
 
-#pragma region
 EXTERN_C NTSYSAPI NTSTATUS NTAPI ZwQueryEaFile(
 	_In_     HANDLE           FileHandle,
 	_Out_    PIO_STATUS_BLOCK IoStatusBlock,
@@ -54,7 +53,6 @@ struct FILE_GET_EA_INFORMATION
 };
 const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
 const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
-#pragma endregion
 EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
 	_In_ POSVERSIONINFOW VersionInfo,
 	_In_ ULONG           TypeMask,

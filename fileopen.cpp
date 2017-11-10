@@ -9,7 +9,7 @@
 #include <winioctl.h>
 #include <pathcch.h>
 #include <list>
-#include <memory>
+#include <optional>
 #include "fileopen.hpp"
 #pragma comment(lib, "ntdll")
 #pragma comment(lib, "pathcch")
@@ -27,14 +27,14 @@ struct REPARSE_DATA_BUFFER
 			USHORT PrintNameOffset;
 			USHORT PrintNameLength;
 			ULONG  Flags;
-			WCHAR  PathBuffer[1];
+			WCHAR  PathBuffer[ANYSIZE_ARRAY];
 		} SymbolicLinkReparseBuffer;
 		struct {
 			USHORT SubstituteNameOffset;
 			USHORT SubstituteNameLength;
 			USHORT PrintNameOffset;
 			USHORT PrintNameLength;
-			WCHAR  PathBuffer[1];
+			WCHAR  PathBuffer[ANYSIZE_ARRAY];
 		} MountPointReparseBuffer;
 	};
 };
@@ -88,7 +88,7 @@ bool PickNextEntry(T& p) noexcept
 		return false;
 	}
 }
-std::unique_ptr<FILE_ID_128> IterateDirectory(const HANDLE directory, const PCWSTR name)
+std::optional<FILE_ID_128> IterateDirectory(const HANDLE directory, const PCWSTR name)
 {
 	const size_t name_len = wcslen(name);
 	const size_t buf_size = 1024 * 1024;
@@ -103,13 +103,13 @@ std::unique_ptr<FILE_ID_128> IterateDirectory(const HANDLE directory, const PCWS
 				const size_t len = dir_ptr->FileNameLength / sizeof(WCHAR);
 				if (len == name_len && wcsncmp(dir_ptr->FileName, name, name_len) == 0)
 				{
-					return std::make_unique<FILE_ID_128>(dir_ptr->FileId);
+					return dir_ptr->FileId;
 				}
 			} while (PickNextEntry(dir_ptr));
 		} while (GetFileInformationByHandleEx(directory, FileIdExtdDirectoryInfo, dir_info, buf_size));
 		SetLastError(ERROR_FILE_NOT_FOUND);
 	}
-	return nullptr;
+	return std::nullopt;
 }
 _Success_(return != nullptr)
 HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
@@ -162,7 +162,7 @@ HANDLE OpenFileCaseSensitive(ATL::CStringW full_path)
 	int visited = 0;
 	for (auto it = components.begin(), end = components.end(); it != end; ++it)
 	{
-		if (std::unique_ptr<FILE_ID_128> child = IterateDirectory(parent, it->name))
+		if (std::optional<FILE_ID_128> child = IterateDirectory(parent, it->name))
 		{
 			FILE_ID_DESCRIPTOR Id = { sizeof Id };
 			Id.Type = ExtendedFileIdType;
