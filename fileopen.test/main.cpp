@@ -2,7 +2,6 @@
 #include <windows.h>
 #include <cstdio>
 #include <vector>
-#include <experimental/filesystem>
 #include "../fileopen.hpp"
 
 bool operator==(const FILE_ID_128& l, const FILE_ID_128& r)
@@ -20,7 +19,7 @@ int wmain(int argc, PWSTR argv[])
 	std::vector<FILE_ID_128> ids;
 	for (int i = 1; i < argc; i++)
 	{
-		FILE_ID_128 id = GetFileID(OpenFileCaseSensitive(std::experimental::filesystem::system_complete(argv[i]).c_str()));
+		FILE_ID_128 id = GetFileID(OpenFileCaseSensitive(argv[i]));
 		for (int j = _countof(FILE_ID_128::Identifier) - 1; j >= 0; --j)
 			printf("%02x", id.Identifier[j]);
 		printf("\t%ls\n", argv[i]);
