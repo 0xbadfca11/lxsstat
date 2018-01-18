@@ -121,14 +121,16 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			{
 				_putws(L"fifo");
 			}
+			else if (Lxss::S_ISBLK(buf.st_mode))
+			{
+				_putws(L"block special file");
+			}
 			else
 			{
 				_putws(L"unknown");
 			}
 			wprintf(
-				L"Device: %xh/%ud   Inode: %llu  Links: %u\n",
-				buf.st_dev,
-				buf.st_dev,
+				L"Device: ?h/?d   Inode: %llu  Links: %u\n",
 				buf.st_ino,
 				buf.st_nlink
 			);

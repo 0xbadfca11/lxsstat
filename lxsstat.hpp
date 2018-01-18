@@ -13,19 +13,38 @@
 #ifndef STATUS_NO_EAS_ON_FILE
 const NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
 #else
-static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L, "");
+static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L);
 #endif
 
 #ifndef IO_REPARSE_TAG_LX_SYMLINK
 const ULONG IO_REPARSE_TAG_LX_SYMLINK = 0xA000001D;
-static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_SYMLINK), "");
+static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_SYMLINK));
 #else
-static_assert(IO_REPARSE_TAG_LX_SYMLINK == 0xA000001D, "");
+static_assert(IO_REPARSE_TAG_LX_SYMLINK == 0xA000001D);
+#endif
+#ifndef IO_REPARSE_TAG_LX_FIFO
+const ULONG IO_REPARSE_TAG_LX_FIFO = 0x80000024;
+static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_FIFO));
+#else
+static_assert(IO_REPARSE_TAG_LX_FIFO == 0x80000024);
+#endif
+#ifndef IO_REPARSE_TAG_LX_CHR
+const ULONG IO_REPARSE_TAG_LX_CHR = 0x80000025;
+static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_CHR));
+#else
+static_assert(IO_REPARSE_TAG_LX_CHR == 0x80000025);
+#endif
+#ifndef IO_REPARSE_TAG_LX_BLK
+const ULONG IO_REPARSE_TAG_LX_BLK = 0x80000026;
+static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_BLK));
+#else
+static_assert(IO_REPARSE_TAG_LX_BLK == 0x80000026);
 #endif
 
 namespace Lxss
 {
 	const uint32_t S_IFLNK = 0120000;
+	const uint32_t S_IFBLK = 060000;
 	const uint32_t S_IFIFO = 010000;
 	const uint32_t S_ISUID = 04000;
 	const uint32_t S_ISGID = 02000;
@@ -57,6 +76,10 @@ namespace Lxss
 	static bool inline S_ISCHR(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFCHR;
+	}
+	static bool inline S_ISBLK(uint32_t st_mode) noexcept
+	{
+		return (st_mode & S_IFMT) == S_IFBLK;
 	}
 	static bool inline S_ISFIFO(uint32_t st_mode) noexcept
 	{
@@ -100,6 +123,18 @@ namespace Lxss
 		uint64_t mtime;
 		uint64_t ctime;
 	};
-	static_assert(sizeof(LXATTRB) == 56, "");
+	static_assert(sizeof(LXATTRB) == 56);
 	const char LxssEaName[] = "LXATTRB";
+#ifndef LX_FILE_METADATA_UID_EA_NAME
+	const char LX_FILE_METADATA_UID_EA_NAME[] = "$LXUID";
+#endif
+#ifndef LX_FILE_METADATA_GID_EA_NAME
+	const char LX_FILE_METADATA_GID_EA_NAME[] = "$LXGID";
+#endif
+#ifndef LX_FILE_METADATA_MODE_EA_NAME
+	const char LX_FILE_METADATA_MODE_EA_NAME[] = "$LXMOD";
+#endif
+#ifndef LX_FILE_METADATA_DEVICE_ID_EA_NAME
+	const char LX_FILE_METADATA_DEVICE_ID_EA_NAME[] = "$LXDEV";
+#endif
 }
