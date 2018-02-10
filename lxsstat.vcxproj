@@ -77,7 +77,7 @@
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalOptions>/Zc:threadSafeInit-,throwingNew /d2guardspecload %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Qspectre /Zc:threadSafeInit-,throwingNew %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
