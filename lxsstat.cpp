@@ -53,11 +53,6 @@ struct FILE_GET_EA_INFORMATION
 };
 const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
 const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
-EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlVerifyVersionInfo(
-	_In_ POSVERSIONINFOW VersionInfo,
-	_In_ ULONG           TypeMask,
-	_In_ ULONGLONG       ConditionMask
-);
 
 namespace Lxss
 {
@@ -114,7 +109,6 @@ namespace Lxss
 	std::wstring realpath(std::wstring path)
 	{
 		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
-		const WCHAR prefix[] = LR"(\\?\)";
 		if (path[0] == L'~')
 		{
 			std::string user = "root";
@@ -181,19 +175,13 @@ namespace Lxss
 			}
 			path.insert(0, !need_reloc ? lxss_root + L"\\rootfs" : lxss_root);
 		}
-		else if (PathIsRelativeW(path.c_str()) || (path[0] == '\\' && wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0))
-		{
-			auto temp = std::make_unique<WCHAR[]>(PATHCCH_MAX_CCH);
-			ATLENSURE(GetFullPathNameW(path.c_str(), PATHCCH_MAX_CCH, temp.get(), nullptr));
-			path = temp.get();
-		}
-		if (wcsncmp(path.c_str(), prefix, wcslen(prefix)) != 0)
-		{
-			path.insert(0, prefix);
-		}
-		std::replace(path.begin(), path.end(), '/', '\\');
-		_RPT1(_CRT_WARN, "realpath(>%ls)\n", path.c_str());
-		return path;
+		std::replace(path.begin(), path.end(), L'/', L'\\');
+		std::wstring full_path(PATHCCH_MAX_CCH, L'\0');
+		ATLENSURE(GetCurrentDirectoryW(PATHCCH_MAX_CCH, full_path.data()));
+		ATLENSURE_SUCCEEDED(PathCchCombineEx(full_path.data(), PATHCCH_MAX_CCH, full_path.c_str(), path.c_str(), PATHCCH_ENSURE_IS_EXTENDED_LENGTH_PATH));
+		full_path.resize(wcslen(full_path.c_str()));
+		_RPT1(_CRT_WARN, "realpath(>%ls)\n", full_path.c_str());
+		return full_path;
 	}
 	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept
 	{
@@ -224,38 +212,11 @@ namespace Lxss
 		const int32_t nsec_per_unit = 100;
 		return{ (ft - diff_win_unix) / unit, (ft - diff_win_unix) % unit * nsec_per_unit };
 	}
-	bool IsBuildNumberGreaterThanOrEqualTo(ULONG build)
-	{
-		OSVERSIONINFOW ver_info;
-		ver_info.dwOSVersionInfoSize = sizeof ver_info;
-		ver_info.dwMajorVersion = 10;
-		ver_info.dwMinorVersion = 0;
-		ver_info.dwBuildNumber = build;
-		ULONGLONG cond_mask = 0;
-		VER_SET_CONDITION(cond_mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-		VER_SET_CONDITION(cond_mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-		VER_SET_CONDITION(cond_mask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
-		ULONG error = RtlNtStatusToDosError(RtlVerifyVersionInfo(&ver_info, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, cond_mask));
-		SetLastError(error);
-		switch (error)
-		{
-		case ERROR_SUCCESS:
-			return true;
-		case ERROR_REVISION_MISMATCH:
-			return false;
-		default:
-			ATL::AtlThrowLastWin32();
-		}
-	}
-	uint32_t DirectoryConstantLinkCount()
-	{
-		return IsBuildNumberGreaterThanOrEqualTo(14946) ? 0 : 2;
-	}
 	constexpr uint64_t inline MAKEUINT64(uint32_t low, uint32_t high) noexcept
 	{
 		return low | high * 1ULL << 32;
 	}
-	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_ void* ea, size_t ea_size)
+	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_writes_bytes_all_(ea_size) void* ea, size_t ea_size)
 	{
 		const size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
 		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
@@ -294,7 +255,7 @@ namespace Lxss
 	{
 		auto windows_path = realpath(path);
 
-		ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
+		ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES));
 		if (!h)
 		{
 			return -1;
@@ -331,7 +292,7 @@ namespace Lxss
 			// issue #3
 			buf->st_dev = 0;
 			buf->st_ino = MAKEUINT64(file_info.nFileIndexLow, file_info.nFileIndexHigh);
-			buf->st_nlink = !S_ISDIR(lxattr.st_mode) ? file_std_info.NumberOfLinks : DirectoryConstantLinkCount();
+			buf->st_nlink = !S_ISDIR(lxattr.st_mode) ? file_std_info.NumberOfLinks : 0;
 			buf->st_atim.tv_sec = lxattr.atime;
 			buf->st_atim.tv_nsec = lxattr.atime_extra;
 			buf->st_mtim.tv_sec = lxattr.mtime;
@@ -406,7 +367,7 @@ namespace Lxss
 	};
 	std::unique_ptr<FILE, fileclose> fopenInLxss(const std::wstring& file)
 	{
-		HANDLE h = OpenFileCaseSensitive(file.c_str());
+		HANDLE h = OpenFileCaseSensitive(file.c_str(), FILE_READ_DATA);
 		if (!h)
 		{
 			return nullptr;
@@ -465,7 +426,7 @@ namespace Lxss
 		auto f = fopenInLxss(file);
 		if (!f)
 		{
-			return{};
+			return {};
 		}
 		const auto lines = ReadLines(f.get());
 		std::unordered_map<std::string, std::vector<std::string>> passwd;
@@ -492,7 +453,7 @@ namespace Lxss
 		auto f = fopenInLxss(file);
 		if (!f)
 		{
-			return{};
+			return {};
 		}
 		const auto lines = ReadLines(f.get());
 		std::unordered_map<uint32_t, const std::string> ids;

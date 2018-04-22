@@ -25,8 +25,6 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 {
 	ATLENSURE(SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32));
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
-	_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG | _CRTDBG_MODE_FILE);
 	_setmode(_fileno(stdout), _O_U8TEXT);
 	_setmode(_fileno(stderr), _O_U8TEXT);
 	if (argc <= 1)
@@ -49,6 +47,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			else
 			{
 				fwprintf(stderr, L"%ls\n%ls", windows_path.c_str(), (PCWSTR)GetWindowsError(error));
+				_CrtDbgBreak();
 			}
 		}
 		else
@@ -60,8 +59,8 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				{
 					ATL::CTempBuffer<CHAR> buffer(buf.st_size + 1);
 					ULONG read_size;
-					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str()));
-					if (h && ReadFile(h, buffer, (ULONG)buf.st_size + 1, &read_size, nullptr))
+					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str(), FILE_READ_DATA));
+					if (h && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
 					{
 						if (read_size == buf.st_size)
 						{

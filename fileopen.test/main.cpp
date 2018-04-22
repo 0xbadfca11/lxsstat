@@ -19,7 +19,7 @@ int wmain(int argc, PWSTR argv[])
 	std::vector<FILE_ID_128> ids;
 	for (int i = 1; i < argc; i++)
 	{
-		FILE_ID_128 id = GetFileID(OpenFileCaseSensitive(argv[i]));
+		FILE_ID_128 id = GetFileID(OpenFileCaseSensitive(argv[i], FILE_READ_ATTRIBUTES));
 		for (int j = _countof(FILE_ID_128::Identifier) - 1; j >= 0; --j)
 			printf("%02x", id.Identifier[j]);
 		printf("\t%ls\n", argv[i]);
