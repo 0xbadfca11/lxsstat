@@ -51,7 +51,8 @@ struct FILE_GET_EA_INFORMATION
 	UCHAR EaNameLength;
 	CHAR  EaName[ANYSIZE_ARRAY];
 };
-const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)();
+// EaNameLength not include '\0'. But buffer must include '\0'.
+const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)() + 1;
 const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 
 namespace Lxss
