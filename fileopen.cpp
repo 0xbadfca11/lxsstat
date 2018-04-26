@@ -65,6 +65,11 @@ HANDLE OpenFileCaseSensitive(_In_z_ PCWSTR lpFileName, _In_ ULONG dwDesiredAcces
 	PCWSTR root;
 	ATLENSURE_SUCCEEDED(PathCchSkipRoot(full_path.get(), &root));
 	const size_t pos = root - full_path.get();
+	if (full_path[pos] == L'\0')
+	{
+		HANDLE root_directory = CreateFileW(full_path.get(), dwDesiredAccess, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+		return root_directory != INVALID_HANDLE_VALUE ? root_directory : nullptr;
+	}
 	ATL::CHandle2 volume = CreateFileW(std::wstring(full_path.get(), pos).c_str(), FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 	if (!volume)
 	{
