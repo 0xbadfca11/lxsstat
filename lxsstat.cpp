@@ -106,6 +106,62 @@ namespace Lxss
 		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", lxss_dir, ARRAYSIZE(lxss_dir)));
 		return lxss_dir;
 	}();
+	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_writes_bytes_all_(ea_size) void* ea, size_t ea_size)
+	{
+		const size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
+		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
+		Ea.AllocateBytes(EaLength);
+
+		const size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
+		ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
+		EaQuery.AllocateBytes(EaQueryLength);
+		EaQuery->NextEntryOffset = 0;
+		const size_t ea_name_len = strlen(ea_name);
+		if (ea_name_len + 1 >= MAXIMUM_LENGTH_OF_EA_NAME)
+		{
+			SetLastError(ERROR_BAD_ARGUMENTS);
+			return false;
+		}
+		EaQuery->EaNameLength = (UCHAR)ea_name_len;
+		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, ea_name);
+
+		IO_STATUS_BLOCK ea_iob;
+		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
+		if (NT_ERROR(ea_status))
+		{
+			SetLastError(ea_status);
+			return false;
+		}
+		// When EaList != null, ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
+		if (Ea->EaValueLength == 0)
+		{
+			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
+			return false;
+		}
+		_ASSERTE(strcmp(Ea->EaName, ea_name) == 0);
+		if (Ea->EaValueLength > ea_size)
+		{
+			SetLastError(ERROR_INSUFFICIENT_BUFFER);
+			return false;
+		}
+		ATL::AtlCrtErrorCheck(memcpy_s(ea, ea_size, &Ea->EaName[Ea->EaNameLength + 1], Ea->EaValueLength));
+		return true;
+	}
+	const bool is_wslfs = []()->bool
+	{
+		ATL::CHandle h(OpenFileCaseSensitive(realpath(L"/").c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES));
+		if (!h)
+		{
+			_CrtDbgBreak();
+			return false;
+		}
+		uint32_t st_mode;
+		if (GetEA(h, LX_FILE_METADATA_MODE_EA_NAME, &st_mode, sizeof st_mode))
+		{
+			return true;
+		}
+		return false;
+	}();
 	const std::unordered_map<std::string, std::vector<std::string>> Passwd = ParsePasswd(realpath(L"/etc/passwd"));
 	std::wstring realpath(std::wstring path)
 	{
@@ -149,11 +205,18 @@ namespace Lxss
 				L"\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F";
 			for (size_t pos = path.find_first_of(fixups); pos != std::string::npos; pos = path.find_first_of(fixups, pos))
 			{
-				WCHAR buf[5];
-				ATLENSURE(swprintf_s(buf, L"%04X", path[pos]) == _countof(buf) - 1);
-				path[pos] = L'#';
-				path.insert(++pos, buf);
-				pos += _countof(buf) - 1;
+				if (is_wslfs)
+				{
+					path[pos] |= 0xF000;
+				}
+				else
+				{
+					WCHAR buf[5];
+					ATLENSURE(swprintf_s(buf, L"%04X", path[pos]) == _countof(buf) - 1);
+					path[pos] = L'#';
+					path.insert(++pos, buf);
+					pos += _countof(buf) - 1;
+				}
 			}
 			bool need_reloc = false;
 			const PCWSTR reloc_directory[] = {
@@ -216,41 +279,6 @@ namespace Lxss
 	constexpr uint64_t inline MAKEUINT64(uint32_t low, uint32_t high) noexcept
 	{
 		return low | high * 1ULL << 32;
-	}
-	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_writes_bytes_all_(ea_size) void* ea, size_t ea_size)
-	{
-		const size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
-		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
-		Ea.AllocateBytes(EaLength);
-
-		const size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
-		ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
-		EaQuery.AllocateBytes(EaQueryLength);
-		EaQuery->NextEntryOffset = 0;
-		EaQuery->EaNameLength = (UCHAR)strlen(ea_name);
-		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, ea_name);
-
-		IO_STATUS_BLOCK ea_iob;
-		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
-		if (NT_ERROR(ea_status))
-		{
-			SetLastError(ea_status);
-			return false;
-		}
-		// When EaList != null, ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (Ea->EaValueLength == 0)
-		{
-			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
-			return false;
-		}
-		_ASSERTE(strcmp(Ea->EaName, ea_name) == 0);
-		if (Ea->EaValueLength > ea_size)
-		{
-			SetLastError(ERROR_INSUFFICIENT_BUFFER);
-			return false;
-		}
-		ATL::AtlCrtErrorCheck(memcpy_s(ea, ea_size, &Ea->EaName[Ea->EaNameLength + 1], Ea->EaValueLength));
-		return true;
 	}
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
