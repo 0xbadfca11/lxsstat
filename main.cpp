@@ -10,15 +10,15 @@
 #include <io.h>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <crtdbg.h>
 #include "lxsstat.hpp"
 #include "fileopen.hpp"
 
-ATL::CHeapPtr<WCHAR> GetWindowsError(ULONG error_code = GetLastError())
+std::unique_ptr<WCHAR[]> GetWindowsError(ULONG error_code = GetLastError())
 {
-	ATL::CHeapPtr<WCHAR> msg;
-	ATLENSURE(msg.Allocate(USHRT_MAX));
-	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error_code, 0, msg, USHRT_MAX, nullptr));
+	auto msg = std::make_unique<WCHAR[]>(USHRT_MAX);
+	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error_code, 0, msg.get(), USHRT_MAX, nullptr));
 	return msg;
 }
 int __cdecl wmain(int argc, wchar_t* argv[])
@@ -46,7 +46,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			}
 			else
 			{
-				fwprintf(stderr, L"%ls\n%ls", windows_path.c_str(), (PCWSTR)GetWindowsError(error));
+				fwprintf(stderr, L"%ls\n%ls", windows_path.c_str(), GetWindowsError(error).get());
 				_CrtDbgBreak();
 			}
 		}
@@ -75,7 +75,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 					}
 					else
 					{
-						wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", (PCWSTR)GetWindowsError());
+						wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", GetWindowsError().get());
 					}
 				}
 				else

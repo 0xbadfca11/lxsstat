@@ -1,3 +1,4 @@
+#pragma once
 namespace ATL
 {
 	struct CHandle2 : CHandle

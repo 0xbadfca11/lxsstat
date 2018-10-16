@@ -40,6 +40,18 @@ static_assert(IsReparseTagMicrosoft(IO_REPARSE_TAG_LX_BLK));
 #else
 static_assert(IO_REPARSE_TAG_LX_BLK == 0x80000026);
 #endif
+#ifndef LX_FILE_METADATA_UID_EA_NAME
+const char LX_FILE_METADATA_UID_EA_NAME[] = "$LXUID";
+#endif
+#ifndef LX_FILE_METADATA_GID_EA_NAME
+const char LX_FILE_METADATA_GID_EA_NAME[] = "$LXGID";
+#endif
+#ifndef LX_FILE_METADATA_MODE_EA_NAME
+const char LX_FILE_METADATA_MODE_EA_NAME[] = "$LXMOD";
+#endif
+#ifndef LX_FILE_METADATA_DEVICE_ID_EA_NAME
+const char LX_FILE_METADATA_DEVICE_ID_EA_NAME[] = "$LXDEV";
+#endif
 
 namespace Lxss
 {
@@ -125,16 +137,4 @@ namespace Lxss
 	};
 	static_assert(sizeof(LXATTRB) == 56);
 	const char LxssEaName[] = "LXATTRB";
-#ifndef LX_FILE_METADATA_UID_EA_NAME
-	const char LX_FILE_METADATA_UID_EA_NAME[] = "$LXUID";
-#endif
-#ifndef LX_FILE_METADATA_GID_EA_NAME
-	const char LX_FILE_METADATA_GID_EA_NAME[] = "$LXGID";
-#endif
-#ifndef LX_FILE_METADATA_MODE_EA_NAME
-	const char LX_FILE_METADATA_MODE_EA_NAME[] = "$LXMOD";
-#endif
-#ifndef LX_FILE_METADATA_DEVICE_ID_EA_NAME
-	const char LX_FILE_METADATA_DEVICE_ID_EA_NAME[] = "$LXDEV";
-#endif
 }
