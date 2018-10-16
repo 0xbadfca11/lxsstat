@@ -1,6 +1,9 @@
 lxsstat
 ===
-stat(1) from outside of Ubuntu on Windows.
+stat(1) from outside of WSL.
+```
+lxsstat {POSIX_PATH|Windows_PATH} [...]
+```
 
 ###### LICENSE
 MIT License
