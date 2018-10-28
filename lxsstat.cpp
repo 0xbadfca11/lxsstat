@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
+#include <ctime>
 #include <fcntl.h>
 #include <io.h>
 #include "lxsstat.hpp"
@@ -185,7 +186,7 @@ namespace Lxss
 			else
 			{
 				pos = path.find(L'/', 1);
-				const std::wstring name = pos != -1 ? path.substr(1, pos - 1) : path.substr(1);
+				const std::wstring name = pos != std::wstring::npos ? path.substr(1, pos - 1) : path.substr(1);
 				user = (PCSTR)ATL::CW2A(name.c_str(), CP_UTF8);
 			}
 			auto it = Passwd.find(user);
@@ -195,7 +196,7 @@ namespace Lxss
 			}
 			else
 			{
-				path = pos != -1 ? (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8) + path.substr(pos) : (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8);
+				path = pos != std::wstring::npos ? (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8) + path.substr(pos) : (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8);
 			}
 		}
 		if (path[0] == L'/')
@@ -225,7 +226,7 @@ namespace Lxss
 			};
 			if (is_distribution_legacy)
 			{
-				for (int i = 0; i < _countof(reloc_directory); ++i)
+				for (uint32_t i = 0; i < _countof(reloc_directory); ++i)
 				{
 					const size_t reloc_length = wcslen(reloc_directory[i]);
 					if (
@@ -274,12 +275,13 @@ namespace Lxss
 		const int64_t diff_win_unix = 116444736000000000;
 		const int32_t unit = 10000000;
 		const int32_t nsec_per_unit = 100;
-		return{ (ft - diff_win_unix) / unit, (ft - diff_win_unix) % unit * nsec_per_unit };
+		return{ (ft - diff_win_unix) / unit, static_cast<long>((ft - diff_win_unix) % unit * nsec_per_unit) };
 	}
 	constexpr uint64_t inline MAKEUINT64(uint32_t low, uint32_t high) noexcept
 	{
 		return low | high * 1ULL << 32;
 	}
+	static_assert(MAKEUINT64(0, 1) == 0x100000000);
 	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
 	{
 		auto windows_path = realpath(path);

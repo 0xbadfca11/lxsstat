@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define STRICT_GS_ENABLED
 #define _ATL_NO_AUTOMATIC_NAMESPACE
+#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <pathcch.h>
 #include <atlalloc.h>
@@ -146,14 +147,14 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			);
 			const struct _timespec64(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
 			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };
-			for (int j = 0; j < _countof(mactime); ++j)
+			for (uint32_t j = 0; j < _countof(mactime); ++j)
 			{
 				char str[80];
 				strftime(
 					str,
 					sizeof str,
 					"%F %T",
-					__pragma(warning(suppress:4996)) gmtime(&mactime[j].tv_sec)
+					gmtime(&mactime[j].tv_sec)
 				);
 				wprintf(L"%hs: %hs.%09lu +0000\n", mactime_string[j], str, mactime[j].tv_nsec);
 			}

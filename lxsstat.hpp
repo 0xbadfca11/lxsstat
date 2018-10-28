@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 
 #ifndef STATUS_NO_EAS_ON_FILE
-const NTSTATUS STATUS_NO_EAS_ON_FILE = 0xC0000052L;
+const ULONG STATUS_NO_EAS_ON_FILE = 0xC0000052L;
 #else
 static_assert(STATUS_NO_EAS_ON_FILE == 0xC0000052L);
 #endif
