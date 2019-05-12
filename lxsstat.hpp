@@ -55,6 +55,7 @@ const char LX_FILE_METADATA_DEVICE_ID_EA_NAME[] = "$LXDEV";
 
 namespace Lxss
 {
+	const uint32_t S_IFSOCK = 0140000;
 	const uint32_t S_IFLNK = 0120000;
 	const uint32_t S_IFBLK = 060000;
 	const uint32_t S_IFIFO = 010000;
@@ -96,6 +97,10 @@ namespace Lxss
 	static bool inline S_ISFIFO(uint32_t st_mode) noexcept
 	{
 		return (st_mode & S_IFMT) == S_IFIFO;
+	}
+	static bool inline S_ISSOCK(uint32_t st_mode) noexcept
+	{
+		return (st_mode & S_IFMT) == S_IFSOCK;
 	}
 	struct stat
 	{

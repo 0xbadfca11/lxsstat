@@ -125,12 +125,16 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			{
 				_putws(L"block special file");
 			}
+			else if (Lxss::S_ISSOCK(buf.st_mode))
+			{
+				_putws(L"socket");
+			}
 			else
 			{
 				_putws(L"unknown");
 			}
 			wprintf(
-				L"Device: ?h/?d   Inode: %llu  Links: %u\n",
+				L"                Inode: %llu  Links: %u\n",
 				buf.st_ino,
 				buf.st_nlink
 			);
