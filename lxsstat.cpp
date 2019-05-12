@@ -139,7 +139,7 @@ namespace Lxss
 			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
 			return false;
 		}
-		_ASSERTE(strcmp(Ea->EaName, ea_name) == 0);
+		_ASSERTE(_stricmp(Ea->EaName, ea_name) == 0);
 		if (Ea->EaValueLength > ea_size)
 		{
 			SetLastError(ERROR_INSUFFICIENT_BUFFER);
@@ -220,12 +220,12 @@ namespace Lxss
 				}
 			}
 			bool need_reloc = false;
-			const PCWSTR reloc_directory[] = {
-				L"/root",
-				L"/home",
-			};
 			if (is_distribution_legacy)
 			{
+				const PCWSTR reloc_directory[] = {
+					L"/root",
+					L"/home",
+				};
 				for (uint32_t i = 0; i < _countof(reloc_directory); ++i)
 				{
 					const size_t reloc_length = wcslen(reloc_directory[i]);
