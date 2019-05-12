@@ -380,10 +380,19 @@ namespace Lxss
 		{
 			linux_control = true;
 		}
-		else if (file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT && file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
+		else if (file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
 		{
-			buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
-			linux_control = true;
+			if (file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
+			{
+				buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
+				linux_control = true;
+			}
+			// WSL can create socket even metadata is disabled.
+			else if (file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_AF_UNIX && !linux_control)
+			{
+				buf->st_mode = S_IFSOCK;
+				linux_control = true;
+			}
 		}
 		return linux_control ? 0 : -1;
 	}
