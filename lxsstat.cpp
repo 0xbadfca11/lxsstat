@@ -323,7 +323,7 @@ namespace Lxss
 			// issue #3
 			buf->st_dev = 0;
 			buf->st_ino = MAKEUINT64(file_info.nFileIndexLow, file_info.nFileIndexHigh);
-			buf->st_nlink = !S_ISDIR(lxattr.st_mode) ? file_std_info.NumberOfLinks : 0;
+			buf->st_nlink = file_std_info.NumberOfLinks;
 			buf->st_atim.tv_sec = lxattr.atime;
 			buf->st_atim.tv_nsec = lxattr.atime_extra;
 			buf->st_mtim.tv_sec = lxattr.mtime;
