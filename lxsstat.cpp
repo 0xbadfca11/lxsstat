@@ -38,23 +38,29 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI ZwQueryEaFile(
 	_In_opt_ PULONG           EaIndex,
 	_In_     BOOLEAN          RestartScan
 );
+// "this attribute has a no minimum size but a maximum of 65536 bytes."
+// https://flatcap.org/linux-ntfs/ntfs/attributes/ea.html
+// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/0eb94f48-6aac-41df-a878-79f4dcfd8989
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/wdm/ns-wdm-_file_full_ea_information
 struct FILE_FULL_EA_INFORMATION
 {
 	ULONG  NextEntryOffset;
 	UCHAR  Flags;
 	UCHAR  EaNameLength;
 	USHORT EaValueLength;
-	CHAR   EaName[ANYSIZE_ARRAY];
+	CHAR   EaName[UINT16_MAX - 8];
 };
+// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/79dc1ea1-158c-4b24-b0e1-8c16c7e2af6b
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/content/ntifs/ns-ntifs-_file_get_ea_information
 struct FILE_GET_EA_INFORMATION
 {
 	ULONG NextEntryOffset;
+	// "The EaName MUST be less than 255 characters"
+	// "This value MUST NOT include the terminating null character to EaName."
 	UCHAR EaNameLength;
-	CHAR  EaName[ANYSIZE_ARRAY];
+	// "contains the extended attribute name followed by a single terminating null character byte."
+	CHAR  EaName[UINT8_MAX];
 };
-// EaNameLength not include '\0'. But buffer must include '\0'.
-const size_t MAXIMUM_LENGTH_OF_EA_NAME = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaNameLength)>::max)() + 1;
-const size_t MAXIMUM_LENGTH_OF_EA_VALUE = (std::numeric_limits<decltype(FILE_FULL_EA_INFORMATION::EaValueLength)>::max)();
 
 namespace Lxss
 {
@@ -107,45 +113,43 @@ namespace Lxss
 		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", lxss_dir, ARRAYSIZE(lxss_dir)));
 		return lxss_dir;
 	}();
+#pragma warning(suppress : 6262)
 	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_writes_bytes_all_(ea_size) void* ea, size_t ea_size)
 	{
-		const size_t EaLength = offsetof(FILE_FULL_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME + MAXIMUM_LENGTH_OF_EA_VALUE;
-		ATL::CHeapPtr<FILE_FULL_EA_INFORMATION> Ea;
-		Ea.AllocateBytes(EaLength);
-
-		const size_t EaQueryLength = offsetof(FILE_GET_EA_INFORMATION, EaName) + MAXIMUM_LENGTH_OF_EA_NAME;
-		ATL::CHeapPtr<FILE_GET_EA_INFORMATION> EaQuery;
-		EaQuery.AllocateBytes(EaQueryLength);
-		EaQuery->NextEntryOffset = 0;
 		const size_t ea_name_len = strlen(ea_name);
-		if (ea_name_len + 1 >= MAXIMUM_LENGTH_OF_EA_NAME)
+		if (ea_name_len >= sizeof(FILE_GET_EA_INFORMATION::EaName))
 		{
 			SetLastError(ERROR_BAD_ARGUMENTS);
 			return false;
 		}
-		EaQuery->EaNameLength = (UCHAR)ea_name_len;
-		ATL::Checked::strcpy_s(EaQuery->EaName, MAXIMUM_LENGTH_OF_EA_NAME, ea_name);
+		FILE_GET_EA_INFORMATION EaQuery;
+		EaQuery.NextEntryOffset = 0;
+		EaQuery.EaNameLength = (UCHAR)ea_name_len;
+		ATL::AtlCrtErrorCheck(strcpy_s(EaQuery.EaName, ea_name));
+		const ULONG EaQueryLength = sizeof EaQuery;
+		FILE_FULL_EA_INFORMATION Ea;
+		const ULONG EaLength = sizeof Ea;
 
 		IO_STATUS_BLOCK ea_iob;
-		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, Ea, EaLength, FALSE, EaQuery, EaQueryLength, nullptr, TRUE);
+		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, &Ea, EaLength, FALSE, &EaQuery, EaQueryLength, nullptr, TRUE);
 		if (NT_ERROR(ea_status))
 		{
 			SetLastError(ea_status);
 			return false;
 		}
 		// When EaList != null, ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (Ea->EaValueLength == 0)
+		if (Ea.EaValueLength == 0)
 		{
 			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
 			return false;
 		}
-		_ASSERTE(_stricmp(Ea->EaName, ea_name) == 0);
-		if (Ea->EaValueLength > ea_size)
+		_ASSERTE(_stricmp(Ea.EaName, ea_name) == 0);
+		if (Ea.EaValueLength > ea_size)
 		{
 			SetLastError(ERROR_INSUFFICIENT_BUFFER);
 			return false;
 		}
-		ATL::AtlCrtErrorCheck(memcpy_s(ea, ea_size, &Ea->EaName[Ea->EaNameLength + 1], Ea->EaValueLength));
+		ATL::Checked::memcpy_s(ea, ea_size, &Ea.EaName[Ea.EaNameLength + 1], Ea.EaValueLength);
 		return true;
 	}
 	const bool is_wslfs = []()->bool
@@ -282,7 +286,7 @@ namespace Lxss
 		return low | high * 1ULL << 32;
 	}
 	static_assert(MAKEUINT64(0, 1) == 0x100000000);
-	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf)
+	_Success_(return == 0) int stat(_In_z_ const wchar_t* __restrict path, _Out_ struct Lxss::stat* __restrict buf)
 	{
 		auto windows_path = realpath(path);
 
