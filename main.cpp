@@ -26,8 +26,8 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 {
 	ATLENSURE(SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32));
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
-	_setmode(_fileno(stdout), _O_U8TEXT);
-	_setmode(_fileno(stderr), _O_U8TEXT);
+	(void)_setmode(_fileno(stdout), _O_U8TEXT);
+	(void)_setmode(_fileno(stderr), _O_U8TEXT);
 	if (argc <= 1)
 	{
 		fputws(L"lxsstat {POSIX_PATH|Windows_PATH} [...]\n", stderr);
