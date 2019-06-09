@@ -336,7 +336,7 @@ namespace Lxss
 			buf->st_ctim.tv_nsec = lxattr.ctime_extra;
 			buf->st_size = S_ISREG(lxattr.st_mode) || S_ISLNK(lxattr.st_mode) ? file_std_info.EndOfFile.QuadPart : (S_ISDIR(lxattr.st_mode)) ? file_storage_info.PhysicalBytesPerSectorForPerformance : 0;
 			buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
-			buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
+			buf->st_blocks = !S_ISDIR(lxattr.st_mode) ? file_std_info.AllocationSize.QuadPart / 512 : 0;
 			buf->st_uid = lxattr.st_uid;
 			buf->st_gid = lxattr.st_gid;
 			// issue #4
@@ -358,7 +358,7 @@ namespace Lxss
 		buf->st_ctim = FileTimeToUnixTime(file_basic_info.ChangeTime.QuadPart);
 		buf->st_size = file_std_info.EndOfFile.QuadPart;
 		buf->st_blksize = file_storage_info.PhysicalBytesPerSectorForPerformance;
-		buf->st_blocks = file_std_info.AllocationSize.QuadPart / 512;
+		buf->st_blocks = !(file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? file_std_info.AllocationSize.QuadPart / 512 : 0;
 
 		buf->st_uid = 0;
 		if (GetEA(h, LX_FILE_METADATA_UID_EA_NAME, &buf->st_uid, sizeof buf->st_uid))
