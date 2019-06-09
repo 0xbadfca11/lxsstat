@@ -7,6 +7,7 @@
 #include <ntstatus.h>
 #include <winternl.h>
 #include <pathcch.h>
+#include <winioctl.h>
 #include <atlalloc.h>
 #include <atlbase.h>
 #include <atlchecked.h>
@@ -384,12 +385,31 @@ namespace Lxss
 		{
 			linux_control = true;
 		}
-		else if (file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+		if (file_attribute_tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
 		{
 			if (file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_LX_SYMLINK)
 			{
-				buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
-				linux_control = true;
+				// WSL can create symlink even metadata is disabled.
+				if (!linux_control)
+				{
+					buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
+					linux_control = true;
+				}
+				if (file_std_info.EndOfFile.QuadPart == 0)
+				{
+					union
+					{
+						REPARSE_GUID_DATA_BUFFER reparse_buf;
+						BYTE pad[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
+					};
+					ULONG junk;
+					if (!DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &reparse_buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
+					{
+						return -1;
+					}
+					buf->st_size = reparse_buf.ReparseDataLength - 4;
+					_ASSERT(reparse_buf.ReparseGuid.Data1 == 2);
+				}
 			}
 			// WSL can create socket even metadata is disabled.
 			else if (file_attribute_tag_info.ReparseTag == IO_REPARSE_TAG_AF_UNIX && !linux_control)
@@ -399,6 +419,51 @@ namespace Lxss
 			}
 		}
 		return linux_control ? 0 : -1;
+	}
+	int64_t readlink(_In_z_ const wchar_t* pathname, _Inout_ std::wstring* buf)
+	{
+		ATL::CHandle h(OpenFileCaseSensitive(pathname, FILE_READ_DATA | FILE_READ_ATTRIBUTES));
+		if (!h)
+		{
+			return -1;
+		}
+		BY_HANDLE_FILE_INFORMATION file_info;
+		if (!GetFileInformationByHandle(h, &file_info))
+		{
+			return -1;
+		}
+		if (file_info.nFileSizeLow == 0 && file_info.nFileSizeHigh == 0)
+		{
+			if (!(file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+			{
+				SetLastError(ERROR_NOT_A_REPARSE_POINT);
+				return -1;
+			}
+			union
+			{
+				REPARSE_GUID_DATA_BUFFER reparse_buf;
+				BYTE pad[MAXIMUM_REPARSE_DATA_BUFFER_SIZE + 1];
+			};
+			ULONG junk;
+			if (!DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &reparse_buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
+			{
+				return -1;
+			}
+			reinterpret_cast<PSTR>(&reparse_buf.ReparseGuid)[reparse_buf.ReparseDataLength] = '\0';
+			*buf = ATL::CA2W(reinterpret_cast<PCSTR>(&reparse_buf.ReparseGuid) + 4, CP_UTF8);
+		}
+		else
+		{
+			ATL::CTempBuffer<CHAR> buffer(file_info.nFileSizeLow + 1LL);
+			ULONG read_size;
+			if (!ReadFile(h, buffer, file_info.nFileSizeLow, &read_size, nullptr) || read_size != file_info.nFileSizeLow)
+			{
+				return -1;
+			}
+			buffer[read_size] = '\0';
+			*buf = ATL::CA2W(buffer, CP_UTF8);
+		}
+		return buf->size();
 	}
 	const std::unordered_map<uint32_t, const std::string> uids = ParseGroup(realpath(L"/etc/passwd"));
 	const std::unordered_map<uint32_t, const std::string> gids = ParseGroup(realpath(L"/etc/group"));

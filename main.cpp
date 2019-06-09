@@ -56,32 +56,14 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			wprintf(L"  File: '%ls'", argv[i]);
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
-				if (buf.st_size < PATHCCH_MAX_CCH)
+				std::wstring target;
+				if (Lxss::readlink(windows_path.c_str(), &target) > 0)
 				{
-					ATL::CTempBuffer<CHAR> buffer(buf.st_size + 1);
-					ULONG read_size;
-					ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str(), FILE_READ_DATA));
-					if (h && ReadFile(h, buffer, (ULONG)buf.st_size, &read_size, nullptr))
-					{
-						if (read_size == buf.st_size)
-						{
-							buffer[read_size] = '\0';
-							ATL::CA2W path(buffer, CP_UTF8);
-							wprintf(L"  ->  '%.*ls'\n", (int)wcslen(path), (PCWSTR)path);
-						}
-						else
-						{
-							wprintf(L"  ->  ?\?\?\?\?\?\?\?");
-						}
-					}
-					else
-					{
-						wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", GetWindowsError().get());
-					}
+					wprintf(L"  ->  '%ls'\n", target.c_str());
 				}
 				else
 				{
-					_putws(L"  ->  symlink too long");
+					wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", GetWindowsError().get());
 				}
 			}
 			else
