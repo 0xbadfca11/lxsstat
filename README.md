@@ -4,6 +4,6 @@ stat(1) from outside of WSL.
 ```
 lxsstat {POSIX_PATH|Windows_PATH} [...]
 ```
-
+Not (and maybe will never) support WSL2.
 ###### LICENSE
 MIT License
