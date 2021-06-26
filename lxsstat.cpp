@@ -13,6 +13,7 @@
 #include <atlchecked.h>
 #include <atlconv.h>
 #include <atlcore.h>
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <sstream>
