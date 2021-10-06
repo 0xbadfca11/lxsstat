@@ -20,7 +20,7 @@ int wmain(int argc, PWSTR argv[])
 	for (int i = 1; i < argc; i++)
 	{
 		FILE_ID_128 id = GetFileID(OpenFileCaseSensitive(argv[i], FILE_READ_ATTRIBUTES));
-		for (int j = _countof(FILE_ID_128::Identifier) - 1; j >= 0; --j)
+		for (int j = _countof(id.Identifier) - 1; j >= 0; --j)
 			printf("%02x", id.Identifier[j]);
 		printf("\t%ls\n", argv[i]);
 		if (std::find(std::cbegin(ids), std::cend(ids), id) != std::cend(ids))

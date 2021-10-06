@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #define STRICT_GS_ENABLED
 #define _ATL_NO_AUTOMATIC_NAMESPACE
+#define _ATL_NO_DEFAULT_LIBS
+#define _ATL_NO_WIN_SUPPORT
 #include <atlalloc.h>
 #include <atlbase.h>
 #include <windows.h>
@@ -15,38 +17,28 @@
 #include "chandle2.hpp"
 #pragma comment(lib, "pathcch")
 
-bool PickNextEntry(_Inout_ const FILE_ID_EXTD_DIR_INFO** p) noexcept
-{
-	_ASSERT(p);
-	_ASSERT(*p);
-	if ((*p)->NextEntryOffset)
-	{
-		*p = reinterpret_cast<const FILE_ID_EXTD_DIR_INFO*>(reinterpret_cast<uintptr_t>(*p) + (*p)->NextEntryOffset);
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
 std::optional<FILE_ID_128> IterateDirectory(_In_ HANDLE directory, _In_z_ PCWSTR target_name)
 {
 	const size_t target_name_len = wcslen(target_name);
-	const size_t buf_size = 1024 * 1024;
+	const int buf_size = 1024 * 1024;
 	ATL::CHeapPtr<FILE_ID_EXTD_DIR_INFO> dir_info;
 	ATLENSURE(dir_info.AllocateBytes(buf_size));
 	if (GetFileInformationByHandleEx(directory, FileIdExtdDirectoryRestartInfo, dir_info, buf_size))
 	{
 		do {
 			const FILE_ID_EXTD_DIR_INFO* dir_ptr = dir_info;
-			do
+			for (;; reinterpret_cast<uintptr_t&>(dir_ptr) += dir_ptr->NextEntryOffset)
 			{
 				const size_t dentry_len = dir_ptr->FileNameLength / sizeof(WCHAR);
 				if (target_name_len == dentry_len && wcsncmp(dir_ptr->FileName, target_name, target_name_len) == 0)
 				{
 					return dir_ptr->FileId;
 				}
-			} while (PickNextEntry(&dir_ptr));
+				if (dir_ptr->NextEntryOffset == 0)
+				{
+					break;
+				}
+			}
 		} while (GetFileInformationByHandleEx(directory, FileIdExtdDirectoryInfo, dir_info, buf_size));
 		SetLastError(ERROR_FILE_NOT_FOUND);
 	}

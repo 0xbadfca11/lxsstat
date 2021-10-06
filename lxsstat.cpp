@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #define STRICT_GS_ENABLED
 #define _ATL_NO_AUTOMATIC_NAMESPACE
+#define _ATL_NO_DEFAULT_LIBS
+#define _ATL_NO_WIN_SUPPORT
 #define WIN32_NO_STATUS
 #include <windows.h>
 #undef WIN32_NO_STATUS
@@ -540,7 +542,7 @@ namespace Lxss
 		}
 		const auto lines = ReadLines(f.get());
 		std::unordered_map<std::string, std::vector<std::string>> passwd;
-		for (auto line : lines)
+		for (const auto& line : lines)
 		{
 			std::stringstream ss(line);
 			std::string part;
