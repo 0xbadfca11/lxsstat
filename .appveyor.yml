@@ -1,6 +1,7 @@
 image: Visual Studio 2019
 shallow_clone: true
 build:
+  project: lxsstat.sln
   verbosity: minimal
 test: off
 deploy: off
