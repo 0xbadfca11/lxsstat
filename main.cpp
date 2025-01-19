@@ -1,55 +1,54 @@
 #define WIN32_LEAN_AND_MEAN
-#define STRICT_GS_ENABLED
-#define _ATL_NO_AUTOMATIC_NAMESPACE
-#define _ATL_NO_DEFAULT_LIBS
-#define _ATL_NO_WIN_SUPPORT
+#define WIL_SUPPRESS_EXCEPTIONS
+#define WIL_USE_STL 1
 #define _CRT_SECURE_NO_WARNINGS
+#define _CRTDBG_MAP_ALLOC
 #include <windows.h>
-#include <pathcch.h>
-#include <atlalloc.h>
-#include <atlbase.h>
-#include <atlconv.h>
-#include <fcntl.h>
-#include <io.h>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
+#include <fcntl.h>
+#include <io.h>
+#include <wil/resource.h>
+#include <wil/result.h>
 #include <crtdbg.h>
 #include "lxsstat.hpp"
-#include "fileopen.hpp"
 
-std::unique_ptr<WCHAR[]> GetWindowsError(ULONG error_code = GetLastError())
+void PrintWindowsError(ULONG error = GetLastError())
 {
-	auto msg = std::make_unique<WCHAR[]>(USHRT_MAX);
-	ATLENSURE(FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error_code, 0, msg.get(), USHRT_MAX, nullptr));
-	return msg;
+	wil::unique_hlocal_string error_msg;
+	FAIL_FAST_IF(!FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error, 0, reinterpret_cast<PWSTR>(&error_msg), 0, nullptr));
+	fputws(error_msg.get(), stderr);
 }
-int __cdecl wmain(int argc, wchar_t* argv[])
+int wmain(int argc, PWSTR argv[])
 {
-	ATLENSURE(SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32));
+	FAIL_FAST_IF_WIN32_BOOL_FALSE(SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32));
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG | _CRTDBG_MODE_FILE);
 	(void)_setmode(_fileno(stdout), _O_U8TEXT);
 	(void)_setmode(_fileno(stderr), _O_U8TEXT);
 	if (argc <= 1)
 	{
-		fputws(L"lxsstat {POSIX_PATH|Windows_PATH} [...]\n", stderr);
+		fputws(L"lxsstat {<file>|<directory>} [...]\n", stderr);
 		return EXIT_FAILURE;
 	}
 
 	for (int i = 1; i < argc; ++i)
 	{
-		auto windows_path = Lxss::realpath(argv[i]);
 		struct Lxss::stat buf;
-		if (Lxss::stat(windows_path.c_str(), &buf) != 0)
+		if (Lxss::stat(argv[i], &buf) != 0)
 		{
 			ULONG error = GetLastError();
 			if (error == STATUS_NO_EAS_ON_FILE)
 			{
-				fwprintf(stderr, L"%ls\nThis file is not under the control of the Windows Subsystem for Linux\n", windows_path.c_str());
+				fputws(argv[i], stderr);
+				fputws(L"\nThis file is not under the control of the Windows Subsystem for Linux\n", stderr);
 			}
 			else
 			{
-				fwprintf(stderr, L"%ls\n%ls", windows_path.c_str(), GetWindowsError(error).get());
+				fputws(argv[i], stderr);
+				fputws(L"\n", stderr);
+				PrintWindowsError(error);
 				_CrtDbgBreak();
 			}
 		}
@@ -59,13 +58,14 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 			if (Lxss::S_ISLNK(buf.st_mode))
 			{
 				std::wstring target;
-				if (Lxss::readlink(windows_path.c_str(), &target) > 0)
+				if (Lxss::readlink(argv[i], &target) > 0)
 				{
 					wprintf(L"  ->  '%ls'\n", target.c_str());
 				}
 				else
 				{
-					wprintf(L"  ->  ?\?\?\?\?\?\?\?\n%ls", GetWindowsError().get());
+					fputws(L"  ->  ?\?\?\?\?\?\?\?\n", stderr);
+					PrintWindowsError();
 				}
 			}
 			else
@@ -122,18 +122,14 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 				buf.st_ino,
 				buf.st_nlink
 			);
-			const PCSTR user = Lxss::UserNameFromUID(buf.st_uid);
-			const PCSTR group = Lxss::GroupNameFromGID(buf.st_gid);
 			wprintf(
-				L"Access: (%04o/%hs)  Uid: (% 5u/% 8hs)   Gid: (% 5u/% 8hs)\n",
+				L"Access: (%04o/%hs)  Uid: (% 5u)   Gid: (% 5u)\n",
 				buf.st_mode & 07777,
 				Lxss::mode_tostring(buf.st_mode).data(),
 				buf.st_uid,
-				user ? user : "--------",
-				buf.st_gid,
-				group ? group : "--------"
+				buf.st_gid
 			);
-			const struct _timespec64(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
+			const timespec(&mactime)[3] = { buf.st_atim, buf.st_mtim ,buf.st_ctim };
 			const PCSTR mactime_string[] = { "Access", "Modify", "Change" };
 			for (size_t j = 0; j < _countof(mactime); ++j)
 			{

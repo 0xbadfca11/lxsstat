@@ -1,34 +1,22 @@
 #define WIN32_LEAN_AND_MEAN
-#define STRICT_GS_ENABLED
-#define _ATL_NO_AUTOMATIC_NAMESPACE
-#define _ATL_NO_DEFAULT_LIBS
-#define _ATL_NO_WIN_SUPPORT
+#define WIL_SUPPRESS_EXCEPTIONS
+#define WIL_USE_STL 1
 #define WIN32_NO_STATUS
+#define _CRTDBG_MAP_ALLOC
 #include <windows.h>
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <winternl.h>
-#include <pathcch.h>
 #include <winioctl.h>
-#include <atlalloc.h>
-#include <atlbase.h>
-#include <atlchecked.h>
-#include <atlconv.h>
-#include <atlcore.h>
-#include <algorithm>
 #include <array>
-#include <memory>
-#include <sstream>
-#include <string>
-#include <unordered_map>
-#include <vector>
 #include <cstdint>
-#include <ctime>
-#include <fcntl.h>
-#include <io.h>
+#include <memory>
+#include <string>
+#include <wil/filesystem.h>
+#include <wil/resource.h>
+#include <wil/result.h>
+#include <crtdbg.h>
 #include "lxsstat.hpp"
-#include "fileopen.hpp"
-#pragma comment(lib, "pathcch")
 #pragma comment(lib, "ntdll")
 
 EXTERN_C NTSYSAPI NTSTATUS NTAPI ZwQueryEaFile(
@@ -68,204 +56,47 @@ struct FILE_GET_EA_INFORMATION
 
 namespace Lxss
 {
-	bool is_distribution_legacy = true;
-	ULONG default_uid = 0;
-	const auto lxss_root = []()->std::wstring
-	{
-		WCHAR lxss_dir[MAX_PATH];
-		ATL::CRegKey lxss_reg_key;
-		if (lxss_reg_key.Open(HKEY_CURRENT_USER, TEXT(R"(Software\Microsoft\Windows\CurrentVersion\Lxss)"), KEY_READ) == ERROR_SUCCESS)
-		{
-			ULONG cch_value = 0;
-			if (RegGetValueW(lxss_reg_key, nullptr, L"DefaultDistribution", RRF_RT_REG_SZ, nullptr, nullptr, &cch_value) == ERROR_SUCCESS)
-			{
-				ATL::CTempBuffer<WCHAR> DefaultDistribution;
-				DefaultDistribution.AllocateBytes(cch_value);
-				if (RegGetValueW(lxss_reg_key, nullptr, L"DefaultDistribution", RRF_RT_REG_SZ, nullptr, DefaultDistribution, &cch_value) == ERROR_SUCCESS)
-				{
-					_RPT1(_CRT_WARN, "DefaultDistribution = %ls\n", (PCWSTR)DefaultDistribution);
-					ATL::CRegKey lxss_distribution_key;
-					if (lxss_distribution_key.Open(lxss_reg_key, ATL::CW2T(DefaultDistribution), KEY_READ) == ERROR_SUCCESS)
-					{
-						cch_value = 0;
-						if (RegGetValueW(lxss_distribution_key, nullptr, L"DistributionName", RRF_RT_REG_SZ, nullptr, nullptr, &cch_value) == ERROR_SUCCESS)
-						{
-							ATL::CTempBuffer<WCHAR> DistributionName;
-							DistributionName.AllocateBytes(cch_value);
-							if (RegGetValueW(lxss_distribution_key, nullptr, L"DistributionName", RRF_RT_REG_SZ, nullptr, DistributionName, &cch_value) == ERROR_SUCCESS)
-							{
-								_RPT1(_CRT_WARN, "DistributionName = %ls\n", (PCWSTR)DistributionName);
-								if (wcscmp(DistributionName, L"Legacy") != 0)
-								{
-									is_distribution_legacy = false;
-								}
-							}
-						}
-						cch_value = sizeof default_uid;
-						RegGetValueW(lxss_distribution_key, nullptr, L"DefaultUid", RRF_RT_REG_DWORD | RRF_ZEROONFAILURE, nullptr, &default_uid, &cch_value);
-						cch_value = sizeof lxss_dir;
-						if (RegGetValueW(lxss_distribution_key, nullptr, L"BasePath", RRF_RT_REG_SZ, nullptr, lxss_dir, &cch_value) == ERROR_SUCCESS)
-						{
-							return lxss_dir;
-						}
-					}
-				}
-			}
-			cch_value = sizeof default_uid;
-			RegGetValueW(lxss_reg_key, nullptr, L"DefaultUid", RRF_RT_REG_DWORD | RRF_ZEROONFAILURE, nullptr, &default_uid, &cch_value);
-		}
-		ATLENSURE(ExpandEnvironmentStringsW(LR"(%LOCALAPPDATA%\lxss)", lxss_dir, ARRAYSIZE(lxss_dir)));
-		return lxss_dir;
-	}();
-#pragma warning(suppress : 6262)
-	_Success_(return == true) bool GetEA(_In_ HANDLE file, _In_z_ PCSTR ea_name, _Out_writes_bytes_all_(ea_size) void* ea, size_t ea_size)
+	bool GetEA(HANDLE file, PCSTR ea_name, void* ea, size_t ea_size)
 	{
 		const size_t ea_name_len = strlen(ea_name);
-		if (ea_name_len >= sizeof(FILE_GET_EA_INFORMATION::EaName))
+		if (ea_name_len >= sizeof FILE_GET_EA_INFORMATION::EaName)
 		{
-			SetLastError(ERROR_BAD_ARGUMENTS);
+			SetLastError(ERROR_INVALID_PARAMETER);
 			return false;
 		}
 		FILE_GET_EA_INFORMATION EaQuery;
 		EaQuery.NextEntryOffset = 0;
-		EaQuery.EaNameLength = (UCHAR)ea_name_len;
-		ATL::AtlCrtErrorCheck(strcpy_s(EaQuery.EaName, ea_name));
-		const ULONG EaQueryLength = sizeof EaQuery;
-		FILE_FULL_EA_INFORMATION Ea;
-		const ULONG EaLength = sizeof Ea;
+		EaQuery.EaNameLength = static_cast<UCHAR>(ea_name_len);
+		FAIL_FAST_IF(strcpy_s(EaQuery.EaName, ea_name) != 0);
+		const auto Ea = std::make_unique<FILE_FULL_EA_INFORMATION>();
 
 		IO_STATUS_BLOCK ea_iob;
-		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, &Ea, EaLength, FALSE, &EaQuery, EaQueryLength, nullptr, TRUE);
+		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, Ea.get(), sizeof(FILE_FULL_EA_INFORMATION), FALSE, &EaQuery, sizeof EaQuery, nullptr, TRUE);
 		if (NT_ERROR(ea_status))
 		{
 			SetLastError(ea_status);
 			return false;
 		}
 		// When EaList != null, ZwQueryEaFile() always return STATUS_SUCCESS even EA not found.
-		if (Ea.EaValueLength == 0)
+		if (Ea->EaValueLength == 0)
 		{
-			SetLastError((ULONG)STATUS_NO_EAS_ON_FILE);
+			SetLastError(static_cast<ULONG>(STATUS_NO_EAS_ON_FILE));
 			return false;
 		}
-		_ASSERTE(_stricmp(Ea.EaName, ea_name) == 0);
-		if (Ea.EaValueLength > ea_size)
+		_ASSERTE(_stricmp(Ea->EaName, ea_name) == 0);
+		if (Ea->EaValueLength > ea_size)
 		{
 			SetLastError(ERROR_INSUFFICIENT_BUFFER);
 			return false;
 		}
-		ATL::Checked::memcpy_s(ea, ea_size, &Ea.EaName[Ea.EaNameLength + 1], Ea.EaValueLength);
+		FAIL_FAST_IF(memcpy_s(ea, ea_size, &Ea->EaName[Ea->EaNameLength + 1], Ea->EaValueLength) != 0);
 		return true;
-	}
-	const bool is_wslfs = []()->bool
-	{
-		ATL::CHandle h(OpenFileCaseSensitive(realpath(L"/").c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES));
-		if (!h)
-		{
-			_CrtDbgBreak();
-			return false;
-		}
-		uint32_t st_mode;
-		if (GetEA(h, LX_FILE_METADATA_MODE_EA_NAME, &st_mode, sizeof st_mode))
-		{
-			return true;
-		}
-		return false;
-	}();
-	const std::unordered_map<std::string, std::vector<std::string>> Passwd = ParsePasswd(realpath(L"/etc/passwd"));
-	std::wstring realpath(std::wstring path)
-	{
-		_RPT1(_CRT_WARN, "realpath(<%ls)\n", path.c_str());
-		if (path[0] == L'~')
-		{
-			std::string user = "root";
-			size_t pos;
-			if (path[1] == L'/' || path[1] == L'\0')
-			{
-				pos = 1;
-				if (PCSTR default_user = UserNameFromUID(default_uid))
-				{
-					user = default_user;
-				}
-				else
-				{
-					fwprintf(stderr, L"Can't get default user name\n");
-				}
-			}
-			else
-			{
-				pos = path.find(L'/', 1);
-				const std::wstring name = pos != std::wstring::npos ? path.substr(1, pos - 1) : path.substr(1);
-				user = (PCSTR)ATL::CW2A(name.c_str(), CP_UTF8);
-			}
-			auto it = Passwd.find(user);
-			if (it == Passwd.end())
-			{
-				fwprintf(stderr, L"Can't found user \"%hs\"\n", user.c_str());
-			}
-			else
-			{
-				path = pos != std::wstring::npos ? (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8) + path.substr(pos) : (PCWSTR)ATL::CA2W(it->second[5].c_str(), CP_UTF8);
-			}
-		}
-		if (path[0] == L'/')
-		{
-			const WCHAR fixups[] = LR"(#<>:"\|?*)"
-				L"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F\x10"
-				L"\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F";
-			for (size_t pos = path.find_first_of(fixups); pos != std::string::npos; pos = path.find_first_of(fixups, pos))
-			{
-				if (is_wslfs)
-				{
-					path[pos] |= 0xF000;
-				}
-				else
-				{
-					WCHAR buf[5];
-					ATLENSURE(swprintf_s(buf, L"%04X", path[pos]) == _countof(buf) - 1);
-					path[pos] = L'#';
-					path.insert(++pos, buf);
-					pos += _countof(buf) - 1;
-				}
-			}
-			bool need_reloc = false;
-			if (is_distribution_legacy)
-			{
-				const PCWSTR reloc_directory[] = {
-					L"/root",
-					L"/home",
-				};
-				for (uint32_t i = 0; i < _countof(reloc_directory); ++i)
-				{
-					const size_t reloc_length = wcslen(reloc_directory[i]);
-					if (
-						wcsncmp(path.c_str(), reloc_directory[i], reloc_length) == 0
-						&& (path[reloc_length] == L'\0' || path[reloc_length] == L'/'))
-					{
-						need_reloc = true;
-						break;
-					}
-				}
-			}
-			path.insert(0, !need_reloc ? lxss_root + L"\\rootfs" : lxss_root);
-		}
-		std::replace(path.begin(), path.end(), L'/', L'\\');
-		std::wstring full_path(PATHCCH_MAX_CCH, L'\0');
-		ATLENSURE(GetCurrentDirectoryW(PATHCCH_MAX_CCH, full_path.data()));
-		ATLENSURE_SUCCEEDED(PathCchCombineEx(full_path.data(), PATHCCH_MAX_CCH, full_path.c_str(), path.c_str(), PATHCCH_ENSURE_IS_EXTENDED_LENGTH_PATH));
-		full_path.resize(wcslen(full_path.c_str()));
-		_RPT1(_CRT_WARN, "realpath(>%ls)\n", full_path.c_str());
-		return full_path;
 	}
 	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept
 	{
-		if (S_ISLNK(st_mode))
-		{
-			return{ "lrwxrwxrwx" };
-		}
-
 		return
 		{
-			/*[0]*/ S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : S_ISCHR(st_mode) ? 'c' : S_ISFIFO(st_mode) ? 'p' : S_ISSOCK(st_mode) ? 's' : '?',
+			/*[0]*/ S_ISLNK(st_mode) ? 'l' : S_ISDIR(st_mode) ? 'd' : S_ISREG(st_mode) ? '-' : S_ISCHR(st_mode) ? 'c' : S_ISFIFO(st_mode) ? 'p' : S_ISSOCK(st_mode) ? 's' : '?',
 			/*[1]*/ st_mode & S_IRUSR ? 'r' : '-',
 			/*[2]*/ st_mode & S_IWUSR ? 'w' : '-',
 			/*[3]*/ st_mode & S_ISUID ? st_mode & S_IXUSR ? 's' : 'S' : st_mode & S_IXUSR ? 'x' : '-',
@@ -278,55 +109,61 @@ namespace Lxss
 			'\0'
 		};
 	}
-	struct _timespec64 FileTimeToUnixTime(LONG64 ft) noexcept
+	timespec FileTimeToUnixTime(LONG64 ft) noexcept
 	{
 		const int64_t diff_win_unix = 116444736000000000;
 		const int32_t unit = 10000000;
 		const int32_t nsec_per_unit = 100;
-		return{ (ft - diff_win_unix) / unit, static_cast<long>((ft - diff_win_unix) % unit * nsec_per_unit) };
+		return { (ft - diff_win_unix) / unit, static_cast<long>((ft - diff_win_unix) % unit * nsec_per_unit) };
 	}
 	constexpr uint64_t inline MAKEUINT64(uint32_t low, uint32_t high) noexcept
 	{
 		return low | high * 1ULL << 32;
 	}
-	static_assert(MAKEUINT64(0, 1) == 0x100000000);
-	_Success_(return == 0) int stat(_In_z_ const wchar_t* __restrict path, _Out_ struct Lxss::stat* __restrict buf)
+	static_assert(MAKEUINT64(0, 1) == 0x1'0000'0000);
+	std::wstring A2W(PCSTR str)
 	{
-		auto windows_path = realpath(path);
-
-		ATL::CHandle h(OpenFileCaseSensitive(windows_path.c_str(), FILE_READ_EA | FILE_READ_ATTRIBUTES));
+		const int cch = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str, -1, nullptr, 0);
+		FAIL_FAST_IF(cch == 0);
+		std::wstring wstr(cch - 1, '\0');
+		FAIL_FAST_IF(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str, -1, wstr.data(), cch) == 0);
+		return wstr;
+	}
+	int stat(PCWSTR path, struct Lxss::stat* buf)
+	{
+		wil::unique_hfile h(CreateFileW(path, FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
 		if (!h)
 		{
 			return -1;
 		}
 
 		BY_HANDLE_FILE_INFORMATION file_info;
-		if (!GetFileInformationByHandle(h, &file_info))
+		if (!GetFileInformationByHandle(h.get(), &file_info))
 		{
 			return -1;
 		}
 		FILE_BASIC_INFO file_basic_info;
-		if (!GetFileInformationByHandleEx(h, FileBasicInfo, &file_basic_info, sizeof file_basic_info))
+		if (!GetFileInformationByHandleEx(h.get(), FileBasicInfo, &file_basic_info, sizeof file_basic_info))
 		{
 			return -1;
 		}
 		FILE_STANDARD_INFO file_std_info;
-		if (!GetFileInformationByHandleEx(h, FileStandardInfo, &file_std_info, sizeof file_std_info))
+		if (!GetFileInformationByHandleEx(h.get(), FileStandardInfo, &file_std_info, sizeof file_std_info))
 		{
 			return -1;
 		}
 		FILE_ATTRIBUTE_TAG_INFO file_attribute_tag_info;
-		if (!GetFileInformationByHandleEx(h, FileAttributeTagInfo, &file_attribute_tag_info, sizeof file_attribute_tag_info))
+		if (!GetFileInformationByHandleEx(h.get(), FileAttributeTagInfo, &file_attribute_tag_info, sizeof file_attribute_tag_info))
 		{
 			return -1;
 		}
 		FILE_STORAGE_INFO file_storage_info;
-		if (!GetFileInformationByHandleEx(h, FileStorageInfo, &file_storage_info, sizeof file_storage_info))
+		if (!GetFileInformationByHandleEx(h.get(), FileStorageInfo, &file_storage_info, sizeof file_storage_info))
 		{
 			return -1;
 		}
 
-		if (LXATTRB lxattr; GetEA(h, LxssEaName, &lxattr, sizeof lxattr))
+		if (LXATTRB lxattr; GetEA(h.get(), LxssEaName, &lxattr, sizeof lxattr)) [[unlikely]]
 		{
 			// issue #3
 			buf->st_dev = 0;
@@ -356,6 +193,8 @@ namespace Lxss
 		// issue #3
 		buf->st_dev = 0;
 		buf->st_ino = MAKEUINT64(file_info.nFileIndexLow, file_info.nFileIndexHigh);
+		// ?
+		buf->st_ino += 2;
 		buf->st_nlink = file_std_info.NumberOfLinks;
 		buf->st_atim = FileTimeToUnixTime(file_basic_info.LastAccessTime.QuadPart);
 		buf->st_mtim = FileTimeToUnixTime(file_basic_info.LastWriteTime.QuadPart);
@@ -365,26 +204,26 @@ namespace Lxss
 		buf->st_blocks = !(file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? file_std_info.AllocationSize.QuadPart / 512 : 0;
 
 		buf->st_uid = 0;
-		if (GetEA(h, LX_FILE_METADATA_UID_EA_NAME, &buf->st_uid, sizeof buf->st_uid))
+		if (GetEA(h.get(), LX_FILE_METADATA_UID_EA_NAME, &buf->st_uid, sizeof buf->st_uid))
 		{
 			linux_control = true;
 		}
 
 		buf->st_gid = 0;
-		if (GetEA(h, LX_FILE_METADATA_GID_EA_NAME, &buf->st_gid, sizeof buf->st_gid))
+		if (GetEA(h.get(), LX_FILE_METADATA_GID_EA_NAME, &buf->st_gid, sizeof buf->st_gid))
 		{
 			linux_control = true;
 		}
 
 		// issue #4
 		buf->st_rdev = 0;
-		if (uint64_t st_rdev; GetEA(h, LX_FILE_METADATA_DEVICE_ID_EA_NAME, &st_rdev, sizeof st_rdev))
+		if (uint64_t st_rdev; GetEA(h.get(), LX_FILE_METADATA_DEVICE_ID_EA_NAME, &st_rdev, sizeof st_rdev))
 		{
 			linux_control = true;
 		}
 
 		buf->st_mode = 0;
-		if (GetEA(h, LX_FILE_METADATA_MODE_EA_NAME, &buf->st_mode, sizeof buf->st_mode))
+		if (GetEA(h.get(), LX_FILE_METADATA_MODE_EA_NAME, &buf->st_mode, sizeof buf->st_mode))
 		{
 			linux_control = true;
 		}
@@ -398,20 +237,17 @@ namespace Lxss
 					buf->st_mode = S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO;
 					linux_control = true;
 				}
-				if (file_std_info.EndOfFile.QuadPart == 0)
+				if (buf->st_size == 0)
 				{
-					union
-					{
-						REPARSE_GUID_DATA_BUFFER reparse_buf;
-						BYTE pad[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
-					};
+					const wil::unique_process_heap_ptr<REPARSE_GUID_DATA_BUFFER> reparse_buf(static_cast<PREPARSE_GUID_DATA_BUFFER>(HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, MAXIMUM_REPARSE_DATA_BUFFER_SIZE)));
 					ULONG junk;
-					if (!DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &reparse_buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
+					if (!DeviceIoControl(h.get(), FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_buf.get(), MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
 					{
 						return -1;
 					}
-					buf->st_size = reparse_buf.ReparseDataLength - 4;
-					_ASSERT(reparse_buf.ReparseGuid.Data1 == 2);
+					buf->st_size = reparse_buf->ReparseDataLength - 4;
+					_ASSERT(reparse_buf->ReparseTag == IO_REPARSE_TAG_LX_SYMLINK);
+					_ASSERT(reparse_buf->ReparseGuid.Data1 == 2);
 				}
 			}
 			// WSL can create socket even metadata is disabled.
@@ -423,180 +259,57 @@ namespace Lxss
 		}
 		return linux_control ? 0 : -1;
 	}
-	int64_t readlink(_In_z_ const wchar_t* pathname, _Inout_ std::wstring* buf)
+	int64_t readlink(PCWSTR pathname, std::wstring* buf)
 	{
-		ATL::CHandle h(OpenFileCaseSensitive(pathname, FILE_READ_DATA | FILE_READ_ATTRIBUTES));
+		wil::unique_hfile h(CreateFileW(pathname, FILE_READ_DATA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
 		if (!h)
 		{
 			return -1;
 		}
 		BY_HANDLE_FILE_INFORMATION file_info;
-		if (!GetFileInformationByHandle(h, &file_info))
+		if (!GetFileInformationByHandle(h.get(), &file_info))
 		{
+			return -1;
+		}
+		if (!(file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+		{
+			SetLastError(ERROR_NOT_A_REPARSE_POINT);
+			return -1;
+		}
+		const wil::unique_process_heap_ptr<REPARSE_GUID_DATA_BUFFER> reparse_buf(static_cast<PREPARSE_GUID_DATA_BUFFER>(HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, MAXIMUM_REPARSE_DATA_BUFFER_SIZE)));
+		ULONG junk;
+		if (!DeviceIoControl(h.get(), FSCTL_GET_REPARSE_POINT, nullptr, 0, reparse_buf.get(), MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
+		{
+			return -1;
+		}
+		if (reparse_buf->ReparseTag != IO_REPARSE_TAG_LX_SYMLINK)
+		{
+			SetLastError(ERROR_NOT_A_REPARSE_POINT);
 			return -1;
 		}
 		if (file_info.nFileSizeLow == 0 && file_info.nFileSizeHigh == 0)
 		{
-			if (!(file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
-			{
-				SetLastError(ERROR_NOT_A_REPARSE_POINT);
-				return -1;
-			}
-			union
-			{
-				REPARSE_GUID_DATA_BUFFER reparse_buf;
-				BYTE pad[MAXIMUM_REPARSE_DATA_BUFFER_SIZE + 1];
-			};
-			ULONG junk;
-			if (!DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, &reparse_buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &junk, nullptr))
-			{
-				return -1;
-			}
-			reinterpret_cast<PSTR>(&reparse_buf.ReparseGuid)[reparse_buf.ReparseDataLength] = '\0';
-			*buf = ATL::CA2W(reinterpret_cast<PCSTR>(&reparse_buf.ReparseGuid) + 4, CP_UTF8);
+			reinterpret_cast<PSTR>(&reparse_buf->ReparseGuid)[reparse_buf->ReparseDataLength] = '\0';
+			*buf = A2W(reinterpret_cast<PCSTR>(&reparse_buf->ReparseGuid.Data2));
 		}
-		else
+		else [[unlikely]]
 		{
-			ATL::CTempBuffer<CHAR> buffer(file_info.nFileSizeLow + 1LL);
+			// This limit has no basis.
+			const int PATH_MAX = 16 * 1024;
+			if (file_info.nFileSizeLow > PATH_MAX)
+			{
+				SetLastError(ERROR_CANT_RESOLVE_FILENAME);
+				return -1;
+			}
+			const auto buffer = std::make_unique_for_overwrite<char[]>(PATH_MAX);
 			ULONG read_size;
-			if (!ReadFile(h, buffer, file_info.nFileSizeLow, &read_size, nullptr) || read_size != file_info.nFileSizeLow)
+			if (!ReadFile(h.get(), buffer.get(), file_info.nFileSizeLow, &read_size, nullptr) || read_size != file_info.nFileSizeLow)
 			{
 				return -1;
 			}
 			buffer[read_size] = '\0';
-			*buf = ATL::CA2W(buffer, CP_UTF8);
+			*buf = A2W(buffer.get());
 		}
 		return buf->size();
-	}
-	const std::unordered_map<uint32_t, const std::string> uids = ParseGroup(realpath(L"/etc/passwd"));
-	const std::unordered_map<uint32_t, const std::string> gids = ParseGroup(realpath(L"/etc/group"));
-	struct fileclose
-	{
-		void operator()(FILE* f) noexcept
-		{
-			fclose(f);
-		}
-	};
-	std::unique_ptr<FILE, fileclose> fopenInLxss(const std::wstring& file)
-	{
-		HANDLE h = OpenFileCaseSensitive(file.c_str(), FILE_READ_DATA);
-		if (!h)
-		{
-			return nullptr;
-		}
-		int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);
-		if (fd == -1)
-		{
-			CloseHandle(h);
-			return nullptr;
-		}
-		std::unique_ptr<FILE, fileclose> f(_fdopen(fd, "r"));
-		if (!f)
-		{
-			_close(fd);
-			return nullptr;
-		}
-		return f;
-	}
-	std::vector<std::string> ReadLines(_In_ FILE* f)
-	{
-		std::vector<std::string> lines;
-		for (;;)
-		{
-			std::string line;
-			for (;;)
-			{
-				char buf[0x80];
-				if (!fgets(buf, _countof(buf), f))
-				{
-					return lines;
-				}
-				line += buf;
-				if (feof(f))
-				{
-					break;
-				}
-				else if (std::find(std::cbegin(buf), std::cend(buf), '\n') == std::cend(buf))
-				{
-					continue;
-				}
-				else
-				{
-					break;
-				}
-			}
-			auto pos = line.find_last_not_of('\n');
-			if (pos != std::string::npos)
-			{
-				line = line.substr(0, pos + 1);
-			}
-			lines.emplace_back(std::move(line));
-		}
-	}
-	std::unordered_map<std::string, std::vector<std::string>> ParsePasswd(const std::wstring& file)
-	{
-		auto f = fopenInLxss(file);
-		if (!f)
-		{
-			return {};
-		}
-		const auto lines = ReadLines(f.get());
-		std::unordered_map<std::string, std::vector<std::string>> passwd;
-		for (const auto& line : lines)
-		{
-			std::stringstream ss(line);
-			std::string part;
-			std::vector<std::string> elements;
-			while (std::getline(ss, part, ':'))
-			{
-				elements.emplace_back(std::move(part));
-			}
-			elements.shrink_to_fit();
-			std::string name = elements[0];
-			passwd.emplace(
-				std::piecewise_construct,
-				std::make_tuple(std::move(name)),
-				std::make_tuple(std::move(elements)));
-		}
-		return passwd;
-	}
-	std::unordered_map<uint32_t, const std::string> ParseGroup(const std::wstring& file)
-	{
-		auto f = fopenInLxss(file);
-		if (!f)
-		{
-			return {};
-		}
-		const auto lines = ReadLines(f.get());
-		std::unordered_map<uint32_t, const std::string> ids;
-		for (const auto& line : lines)
-		{
-			auto const head = line.data();
-			size_t name_length = line.find(":");
-			size_t id_pos = line.find(":", name_length + 1) + 1;
-			ids.emplace(std::piecewise_construct, std::make_tuple(std::stoi(head + id_pos)), std::make_tuple(head, name_length));
-		}
-		return ids;
-	}
-	_Ret_maybenull_z_ PCSTR NameFromIDs(const std::unordered_map<uint32_t, const std::string>& ids, uint32_t id)
-	{
-		_ASSERTE(ids.size() > 0);
-		auto it = ids.find(id);
-		if (it != ids.end())
-		{
-			return it->second.c_str();
-		}
-		else
-		{
-			return nullptr;
-		}
-	}
-	_Ret_maybenull_z_ PCSTR UserNameFromUID(uint32_t uid)
-	{
-		return NameFromIDs(uids, uid);
-	}
-	_Ret_maybenull_z_ PCSTR GroupNameFromGID(uint32_t gid)
-	{
-		return NameFromIDs(gids, gid);
 	}
 }

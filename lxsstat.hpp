@@ -1,14 +1,11 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <winternl.h>
 #include <array>
 #include <string>
-#include <unordered_map>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
-#include <sys/stat.h>
 
 #ifndef STATUS_NO_EAS_ON_FILE
 const ULONG STATUS_NO_EAS_ON_FILE = 0xC0000052L;
@@ -107,9 +104,9 @@ namespace Lxss
 		uint32_t st_dev;
 		uint64_t st_ino;
 		uint32_t st_nlink;
-		struct _timespec64 st_atim;
-		struct _timespec64 st_mtim;
-		struct _timespec64 st_ctim;
+		timespec st_atim;
+		timespec st_mtim;
+		timespec st_ctim;
 		uint64_t st_size;
 		uint32_t st_blksize;
 		uint64_t st_blocks;
@@ -118,14 +115,9 @@ namespace Lxss
 		uint32_t st_rdev;
 		uint32_t st_mode;
 	};
-	_Success_(return == 0) int stat(_In_z_ const wchar_t *__restrict path, _Out_ struct Lxss::stat *__restrict buf);
-	std::wstring realpath(std::wstring path);
-	int64_t readlink(_In_z_ const wchar_t* pathname, _Inout_ std::wstring* buf);
+	int stat(PCWSTR path, struct Lxss::stat* buf);
+	int64_t readlink(PCWSTR pathname, std::wstring* buf);
 	std::array<char, 11> mode_tostring(uint32_t st_mode) noexcept;
-	std::unordered_map<std::string, std::vector<std::string>> ParsePasswd(const std::wstring& file);
-	std::unordered_map<uint32_t, const std::string> ParseGroup(const std::wstring& file);
-	_Ret_maybenull_z_ PCSTR UserNameFromUID(uint32_t uid);
-	_Ret_maybenull_z_ PCSTR GroupNameFromGID(uint32_t gid);
 
 	struct LXATTRB
 	{

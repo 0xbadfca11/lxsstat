@@ -21,22 +21,16 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="fileopen.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lxsstat.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="fileopen.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="chandle2.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="AutoVisualizer.natvis" />
+    <Manifest Include="longPathAware.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\wil\natvis\wil.natvis" />
   </ItemGroup>
 </Project>

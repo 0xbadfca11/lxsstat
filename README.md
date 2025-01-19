@@ -1,9 +1,9 @@
-lxsstat [![Build status](https://ci.appveyor.com/api/projects/status/xd7ab9cerqlmsxg7)](https://ci.appveyor.com/project/0xbadfca11/lxsstat)
+lxsstat
 ===
 stat(1) from outside of WSL.
 ```
-lxsstat {POSIX_PATH|Windows_PATH} [...]
+lxsstat {<file>|<directory>} [...]
 ```
-Not (and maybe will never) support WSL2.
+Not support inside of ext4.vhdx.
 ###### LICENSE
 MIT License

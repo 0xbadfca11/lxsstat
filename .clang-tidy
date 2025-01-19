@@ -1,1 +1,1 @@
-Checks: '-clang-diagnostic-missing-field-initializers,-clang-diagnostic-nonportable-include-path'
+Checks: '-clang-diagnostic-missing-field-initializers,-clang-diagnostic-nonportable-include-path,-clang-diagnostic-unknown-pragmas'
