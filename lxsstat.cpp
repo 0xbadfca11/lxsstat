@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <wil/filesystem.h>
 #include <wil/resource.h>
 #include <wil/result.h>
 #include <crtdbg.h>
@@ -68,7 +67,7 @@ namespace Lxss
 		EaQuery.NextEntryOffset = 0;
 		EaQuery.EaNameLength = static_cast<UCHAR>(ea_name_len);
 		FAIL_FAST_IF(strcpy_s(EaQuery.EaName, ea_name) != 0);
-		const auto Ea = std::make_unique<FILE_FULL_EA_INFORMATION>();
+		const auto Ea = std::make_unique_for_overwrite<FILE_FULL_EA_INFORMATION>();
 
 		IO_STATUS_BLOCK ea_iob;
 		NTSTATUS ea_status = ZwQueryEaFile(file, &ea_iob, Ea.get(), sizeof(FILE_FULL_EA_INFORMATION), FALSE, &EaQuery, sizeof EaQuery, nullptr, TRUE);
